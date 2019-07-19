@@ -119,6 +119,8 @@ static void *H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_par
 static void *H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char *name, hid_t dapl_id, hid_t dxpl_id, void **req);
 static herr_t H5VL_pdc_dataset_read(void *dset, hid_t mem_type_id, hid_t mem_space_id, hid_t file_space_id, hid_t plist_id, void *buf, void **req);
 static herr_t H5VL_pdc_dataset_write(void *dset, hid_t mem_type_id, hid_t mem_space_id, hid_t file_space_id, hid_t plist_id, const void *buf, void **req);
+static herr_t H5VL_pdc_dataset_get(void *_dset, H5VL_dataset_get_t get_type,
+                                     hid_t dxpl_id, void **req, va_list arguments);
 static herr_t H5VL_pdc_dataset_close(void *dset, hid_t dxpl_id, void **req);
 
 /*******************/
@@ -163,7 +165,7 @@ static const H5VL_class_t H5VL_pdc_g = {
         H5VL_pdc_dataset_open,                      /* open */
         H5VL_pdc_dataset_read,                      /* read */
         H5VL_pdc_dataset_write,                     /* write */
-        NULL,                                       /* get */
+        H5VL_pdc_dataset_get,                       /* get */
         NULL,                                       /* specific */
         NULL,                                       /* optional */
         H5VL_pdc_dataset_close                      /* close */
@@ -720,7 +722,7 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get number of dimensions");
     if(ndim != H5Sget_simple_extent_dims(space_id, dims, NULL))
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get dimensions");
-    PDCprop_set_obj_dims(obj_prop, 1, dims);
+    PDCprop_set_obj_dims(obj_prop, ndim, dims);
     
     /* Create PDC object */
     obj_id = PDCobj_create_mpi(o->file->cont_id, name, obj_prop, 0, o->file->comm);
@@ -793,13 +795,13 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
     perr_t ret;
     
     FUNC_ENTER_VOL(herr_t, SUCCEED)
-    
+
     /* Get memory dataspace object */
     if((ndim = H5Sget_simple_extent_ndims(mem_space_id)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
     if(ndim != H5Sget_simple_extent_dims(mem_space_id, dims, NULL))
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
-            
+
     offset = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
     offset[0] = 0;
     region_x = PDCregion_create(ndim, offset, dims);
@@ -826,7 +828,7 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
 
     if((ret = PDCreg_release_lock(dset->obj.obj_id, region_xx, WRITE)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't release lock");
-    
+
 done:
     FUNC_LEAVE_VOL
 } /* end H5VL_pdc_dataset_write() */
@@ -881,6 +883,64 @@ herr_t H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id,
 done:
     FUNC_LEAVE_VOL
 } /* end H5VL_pdc_dataset_read() */
+
+/*---------------------------------------------------------------------------*/
+herr_t
+H5VL_pdc_dataset_get(void *_dset, H5VL_dataset_get_t get_type,
+                       hid_t H5VL_ATTR_UNUSED dxpl_id, void H5VL_ATTR_UNUSED **req, va_list arguments)
+{
+    H5VL_pdc_dset_t *dset = (H5VL_pdc_dset_t *)_dset;
+    
+    FUNC_ENTER_VOL(herr_t, SUCCEED)
+    
+    switch (get_type) {
+        case H5VL_DATASET_GET_DCPL:
+        {
+            hid_t *plist_id = va_arg(arguments, hid_t *);
+            
+            /* Retrieve the dataset's creation property list */
+            if((*plist_id = H5Pcopy(dset->dcpl_id)) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dset creation property list");
+            
+            break;
+        } /* end block */
+        case H5VL_DATASET_GET_DAPL:
+        {
+            hid_t *plist_id = va_arg(arguments, hid_t *);
+            
+            /* Retrieve the dataset's access property list */
+            if((*plist_id = H5Pcopy(dset->dapl_id)) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dset access property list");
+            
+            break;
+        } /* end block */
+        case H5VL_DATASET_GET_SPACE:
+        {
+            hid_t *ret_id = va_arg(arguments, hid_t *);
+            
+            /* Retrieve the dataset's dataspace */
+            if((*ret_id = H5Scopy(dset->space_id)) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dataspace ID of dataset");
+            break;
+        } /* end block */
+        case H5VL_DATASET_GET_TYPE:
+        {
+            hid_t *ret_id = va_arg(arguments, hid_t *);
+            
+            /* Retrieve the dataset's datatype */
+            if((*ret_id = H5Tcopy(dset->type_id)) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get datatype ID of dataset");
+            break;
+        } /* end block */
+        case H5VL_DATASET_GET_STORAGE_SIZE:
+        case H5VL_DATASET_GET_OFFSET:
+        default:
+            HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "can't get this type of information from dataset");
+    } /* end switch */
+    
+done:
+    FUNC_LEAVE_VOL
+} /* end H5VL_pdc_dataset_get() */
 
 /*---------------------------------------------------------------------------*/
 herr_t H5VL_pdc_dataset_close(void *_dset, hid_t dxpl_id, void **req)
