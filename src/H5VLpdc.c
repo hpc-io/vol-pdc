@@ -803,7 +803,16 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
 
     offset = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
-    offset[0] = 0;
+    if(ndim == 1)
+        offset[0] = 0;
+    else if(ndim == 2) {
+        offset[1] = 0; offset[0] = 0;
+    }
+    else if(ndim == 3) {
+        offset[2] = 0; offset[1] = 0; offset[0] = 0;
+    }
+    else
+        HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data dimension not supported");
     region_x = PDCregion_create(ndim, offset, dims);
     dset->obj.reg_id_from = region_x;
     
