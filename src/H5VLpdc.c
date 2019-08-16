@@ -704,14 +704,18 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_SYM, H5E_CANTCOPY, NULL, "failed to copy dapl");
     
     obj_prop = PDCprop_create(PDC_OBJ_CREATE, pdc_id);
-    if(H5T_INTEGER == H5Tget_class(type_id)) {
+    if(H5Tequal(H5T_NATIVE_INT, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_INT);
         dset->obj.type = PDC_INT;
     }
-    else if(H5T_FLOAT == H5Tget_class(type_id)) {
+    else if(H5Tequal(H5T_NATIVE_FLOAT, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
         dset->obj.type = PDC_FLOAT;
     }
+    else if(H5Tequal(H5T_NATIVE_CHAR, type_id) == TRUE) {
+        PDCprop_set_obj_type(obj_prop, PDC_CHAR);
+        dset->obj.type = PDC_CHAR;
+    } 
     else {
         dset->obj.type = PDC_UNKNOWN;
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, NULL, "datatype is not supported yet");
@@ -770,6 +774,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params,
     strcpy(dset->obj.obj_name, name);
     dset->obj.obj_id = PDCobj_open(name, pdc_id);
     obj_info = PDCobj_get_info(name);
+    dset->space_id = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
     dset->obj.type = obj_info->obj_pt->type;
     o->file->nobj++;
     H5_LIST_INSERT_HEAD(&o->file->ids, dset, entry);
@@ -796,6 +801,11 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
     
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
+    if(file_space_id == H5S_ALL)
+        file_space_id = dset->space_id;
+    if(mem_space_id == H5S_ALL)
+        mem_space_id = file_space_id;
+
     /* Get memory dataspace object */
     if((ndim = H5Sget_simple_extent_ndims(mem_space_id)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
@@ -815,7 +825,7 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data dimension not supported");
     region_x = PDCregion_create(ndim, offset, dims);
     dset->obj.reg_id_from = region_x;
-    
+
     type_size = H5Tget_size(mem_type_id);
     H5VL__pdc_sel_to_recx_iov(file_space_id, type_size, offset);
     
@@ -824,11 +834,13 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
     free(offset);
     
     dset->mapped = 1;
-    
+
     if(PDC_INT == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj.obj_id, region_xx);
     else if(PDC_FLOAT == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj.obj_id, region_xx);
+    else if(PDC_CHAR == dset->obj.type)
+        PDCbuf_obj_map((void *)buf, PDC_CHAR, region_x, dset->obj.obj_id, region_xx);
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
         
