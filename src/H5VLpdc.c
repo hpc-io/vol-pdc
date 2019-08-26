@@ -712,6 +712,10 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
         dset->obj.type = PDC_FLOAT;
     }
+    else if(H5Tequal(H5T_NATIVE_DOUBLE, type_id) == TRUE) {
+        PDCprop_set_obj_type(obj_prop, PDC_DOUBLE);
+        dset->obj.type = PDC_DOUBLE;
+    }
     else if(H5Tequal(H5T_NATIVE_CHAR, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_CHAR);
         dset->obj.type = PDC_CHAR;
@@ -839,6 +843,8 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj.obj_id, region_xx);
     else if(PDC_FLOAT == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj.obj_id, region_xx);
+    else if(PDC_DOUBLE == dset->obj.type)
+        PDCbuf_obj_map((void *)buf, PDC_DOUBLE, region_x, dset->obj.obj_id, region_xx);
     else if(PDC_CHAR == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_CHAR, region_x, dset->obj.obj_id, region_xx);
     else
