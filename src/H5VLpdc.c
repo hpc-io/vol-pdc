@@ -281,7 +281,7 @@ H5VL_pdc_init(hid_t H5VL_ATTR_UNUSED vipl_id)
         HGOTO_ERROR(H5E_VOL, H5E_CANTREGISTER, FAIL, "can't register error class");
     
     /* Init PDC */
-    pdc_id = PDC_init("pdc");
+    pdc_id = PDCinit("pdc");
     if(pdc_id <= 0)
         HGOTO_ERROR(H5E_VOL, H5E_CANTINIT, FAIL, "could not initialize PDC");
     
@@ -657,7 +657,7 @@ herr_t H5VL_pdc_file_close(void *_file, hid_t dxpl_id, void **req)
     if((ret = PDCcont_close(file->cont_id)) < 0 )
         HGOTO_ERROR(H5E_FILE, H5E_CANTCLOSEFILE, FAIL, "failed to close container");
         
-    if((ret = PDC_close(pdc_id)) < 0)
+    if((ret = PDCclose(pdc_id)) < 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCLOSEFILE, FAIL, "failed to close PDC");
     
     /* Close the file */
