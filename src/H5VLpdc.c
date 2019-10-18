@@ -59,7 +59,7 @@ typedef struct H5VL_pdc_obj_t {
     H5VL_pdc_item_t     item; /* Must be first */
     char                obj_name[ADDR_MAX];
     pdcid_t             obj_id;
-    PDC_var_type_t      type;
+    pdc_var_type_t      type;
     pdcid_t             reg_id_from;
     pdcid_t             reg_id_to;
 } H5VL_pdc_obj_t;
@@ -425,7 +425,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info)
     
     file->nobj = 0;
     
-    PDC_LIST_INIT(&file->ids);
+    H5_LIST_INIT(&file->ids);
     
     FUNC_RETURN_SET((void *)file);
     
@@ -758,7 +758,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params,
 {
     H5VL_pdc_item_t *o = (H5VL_pdc_item_t *)obj;
     H5VL_pdc_dset_t *dset = NULL;
-    struct PDC_obj_info *obj_info;
+    struct pdc_obj_info *obj_info;
     
     FUNC_ENTER_VOL(void *, NULL)
     
@@ -850,10 +850,10 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
         
-    if((ret = PDCreg_obtain_lock(dset->obj.obj_id, region_xx, WRITE, NOBLOCK)) < 0)
+    if((ret = PDCreg_obtain_lock(dset->obj.obj_id, region_xx, PDC_WRITE, PDC_NOBLOCK)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't obtain lock");
 
-    if((ret = PDCreg_release_lock(dset->obj.obj_id, region_xx, WRITE)) < 0)
+    if((ret = PDCreg_release_lock(dset->obj.obj_id, region_xx, PDC_WRITE)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't release lock");
 
 done:
@@ -898,13 +898,17 @@ herr_t H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id,
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj.obj_id, region_xx);
     else if(PDC_FLOAT == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj.obj_id, region_xx);
+    else if(PDC_DOUBLE == dset->obj.type)
+        PDCbuf_obj_map((void *)buf, PDC_DOUBLE, region_x, dset->obj.obj_id, region_xx);
+    else if(PDC_CHAR == dset->obj.type)
+        PDCbuf_obj_map((void *)buf, PDC_CHAR, region_x, dset->obj.obj_id, region_xx);
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
         
-    if((ret = PDCreg_obtain_lock(dset->obj.obj_id, region_xx, READ, NOBLOCK)) < 0)
+    if((ret = PDCreg_obtain_lock(dset->obj.obj_id, region_xx, PDC_READ, PDC_NOBLOCK)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't obtain lock");
     
-    if((ret = PDCreg_release_lock(dset->obj.obj_id, region_xx, READ)) < 0)
+    if((ret = PDCreg_release_lock(dset->obj.obj_id, region_xx, PDC_READ)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't release lock");
     
 done:
