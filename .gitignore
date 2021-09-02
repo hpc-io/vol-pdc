@@ -1,0 +1,8 @@
+build/
+CMakeCache.txt
+CMakeFiles/
+CMakeFiles/
+Makefile
+examples/cmake_install.cmake
+src/H5VLpdc_config.h
+src/H5VLpdc_config.h.gch

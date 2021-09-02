@@ -21,6 +21,8 @@
 #define H5VL_PDC_VERSION_MAJOR    @HDF5_VOL_PDC_VERSION_MAJOR@
 /* Reflects any API changes */
 #define H5VL_PDC_VERSION_MINOR    @HDF5_VOL_PDC_VERSION_MINOR@
+/* Reflects major releases of connector */
+#define H5VL_CONNECTOR_VERSION_MAJOR @HDF5_VOL_CONNECTOR_VERSION_MAJOR@
 /* Reflects any library code changes */
 #define H5VL_PDC_VERSION_PATCH    @HDF5_VOL_PDC_VERSION_PATCH@
 /* Version string */

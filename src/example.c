@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
     /* Set up FAPL */
     if((fapl_id = H5Pcreate(H5P_FILE_ACCESS)) < 0)
         printf("H5Pcreate() error\n");
-
+    H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     /* Initialize VOL */
     pdc_vol_id = H5VLregister_connector_by_name("pdc", H5P_DEFAULT);
 //    pdc_vol_id = H5VLregister_connector(&H5VL_pdc_g, H5P_DEFAULT);
