@@ -13,13 +13,16 @@
  */
 #ifndef H5VLpdc_H
 #define H5VLpdc_H
-
 /* Include package's public header */
 #include "H5VLpdc_public.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Identifier for the pass-through VOL connector */
+#define H5VL_PDC (H5VL_pdc_register())
+H5_DLL hid_t H5VL_pdc_register(void);
 
 /* Nothing */
 

@@ -15,11 +15,12 @@ int main(int argc, char *argv[]) {
     hid_t dset_id1, dset_id2, dset_id3, dset_id4, dset_id5, dset_id6, dset_id7, dset_id8;
     hid_t filespace, memspace;
     herr_t ierr;
-    MPI_Comm comm;
+    //MPI_Comm comm;
     int my_rank, num_procs;
-    
+    my_rank = 0;
+    num_procs =1;
     // Variables and dimensions
-//    long numparticles = 8388608;    // 8  meg particles per process
+    //long numparticles = 8388608;    // 8  meg particles per process
     long numparticles = 4;
     long long total_particles, offset;
     
@@ -31,16 +32,16 @@ int main(int argc, char *argv[]) {
     int z_dim = 64;
     int i;
     
-    MPI_Init(&argc, &argv);
-    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
+    //MPI_Init(&argc, &argv);
+    //MPI_Comm_dup(MPI_COMM_WORLD, &comm);
     
-    MPI_Comm_rank (comm, &my_rank);
-    MPI_Comm_size (comm, &num_procs);
+    //MPI_Comm_rank (comm, &my_rank);
+    //MPI_Comm_size (comm, &num_procs);
     
-    MPI_Allreduce(&numparticles, &total_particles, 1, MPI_LONG_LONG, MPI_SUM, comm);
-    MPI_Scan(&numparticles, &offset, 1, MPI_LONG_LONG, MPI_SUM, comm);
+    //MPI_Allreduce(&numparticles, &total_particles, 1, MPI_LONG_LONG, MPI_SUM, comm);
+    //MPI_Scan(&numparticles, &offset, 1, MPI_LONG_LONG, MPI_SUM, comm);
     offset -= numparticles;
-    
+    offset = 0;
     if (my_rank == 0) 
         printf ("Number of paritcles: %ld \n", numparticles);
 
@@ -92,10 +93,10 @@ int main(int argc, char *argv[]) {
     dset_id8 = H5Dcreate(file_id, "id2", H5T_NATIVE_INT, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     
     fapl_id = H5Pcreate(H5P_DATASET_XFER);
-    H5Pset_dxpl_mpio(fapl_id, H5FD_MPIO_COLLECTIVE);
+    //H5Pset_dxpl_mpio(fapl_id, H5FD_MPIO_COLLECTIVE);
     H5Sselect_hyperslab (filespace, H5S_SELECT_SET, (hsize_t *) &offset, NULL, (hsize_t *) &numparticles, NULL);
  
-    MPI_Barrier (comm);
+    //MPI_Barrier (comm);
     ierr = H5Dwrite(dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, x);
     if(ierr < 0)
         printf("write x failed\n");
@@ -160,7 +161,7 @@ int main(int argc, char *argv[]) {
     free(pz);
     free(id1);
     free(id2);
-    (void)MPI_Finalize();
+    //(void)MPI_Finalize();
     return 0;
 }
 
