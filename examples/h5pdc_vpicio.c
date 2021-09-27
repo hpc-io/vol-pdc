@@ -23,8 +23,9 @@ int main(int argc, char *argv[]) {
     hid_t attr1;
     hid_t aid1;
     herr_t ierr;
-    int         point_out;      /* Buffer to read scalar attribute back */
-    int  point    = 1;
+    int point_out;      /* Buffer to read scalar attribute back */
+    int point = 1;
+    int loop;
     //MPI_Comm comm;
     int my_rank, num_procs;
     my_rank = 0;
@@ -141,7 +142,7 @@ int main(int argc, char *argv[]) {
     if(ierr < 0)
         printf("write id2 failed\n");
 
-   // r_dset_id1 = H5Dopen2(file_id, "x", H5P_DEFAULT);
+    r_dset_id1 = H5Dopen2(file_id, "x", H5P_DEFAULT);
    // r_dset_id2 = H5Dopen2(file_id, "y", H5P_DEFAULT);
    // r_dset_id3 = H5Dopen2(file_id, "z", H5P_DEFAULT);
    // r_dset_id4 = H5Dopen2(file_id, "px", H5P_DEFAULT);
@@ -153,7 +154,17 @@ int main(int argc, char *argv[]) {
     ierr = H5Dread(dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xr);
     if(ierr < 0)
         printf("read dset1 failed\n");
-   // ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xr);
+
+    fprintf(stderr, "\nxr vals:\n");
+    for (loop = 0; loop < numparticles; loop++) {
+    	fprintf(stderr, "%f", xr[loop]);
+    }
+    fprintf(stderr, "\nx vals:\n");
+    for (loop = 0; loop < numparticles; loop++) {
+    	fprintf(stderr, "%f", x[loop]);
+    }
+    
+    ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xr);
     if(ierr < 0)
         printf("read r_dset1 failed\n");
 
@@ -172,9 +183,10 @@ int main(int argc, char *argv[]) {
     ierr  = H5Aread(attr1, H5T_NATIVE_INT, &point_out);
     if(ierr < 0)
         printf("read attr1 failed\n");
-    fprintf(stderr, "point_out and point:\n");
-    fprintf(stderr, "%d\n", point_out);
-    fprintf(stderr, "%d\n", point);
+
+    if (point != point_out) {
+        printf("read attribute value is incorrect\n");
+    }
     /* close attribute */
     ierr = H5Aclose(attr1);
     if(ierr < 0)
@@ -219,6 +231,8 @@ int main(int argc, char *argv[]) {
     free(pz);
     free(id1);
     free(id2);
+
+    free(xr);
     //(void)MPI_Finalize();
     return 0;
 }

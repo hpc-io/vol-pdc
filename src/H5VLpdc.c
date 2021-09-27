@@ -1011,10 +1011,21 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
 
     // use group name as well (or instead of) file name
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    char new_name[strlen(name) + 1];
+    int buff_len;
+    if (o->group_name) {
+        buff_len = strlen(name) + strlen(o->file->file_name) + strlen(o->group_name) + 1;
+    } else {
+        buff_len = strlen(name) + strlen(o->file->file_name) + 1;
+    }
+    char new_name[buff_len];
+    //char new_name[strlen(name) + 1];
     if (o->group_name) {
         strcpy(new_name, name);
         strcat(new_name, o->group_name);
+        strcat(new_name, o->file->file_name);
+    } else {
+        strcpy(new_name, name);
+        strcat(new_name, o->file->file_name);
     }
     H5VL_pdc_dset_t *dset = NULL;
     pdcid_t obj_prop, obj_id;
@@ -1078,15 +1089,11 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     /* Create PDC object */
     fflush(stdout);
     //todo add file name
-    if (o->group_name) {
-        obj_id = PDCobj_create(o->file->cont_id, new_name, obj_prop);
-    } else {
-        fprintf(stderr, "\nPDCobj_create name: %s\n", name);
-        obj_id = PDCobj_create(o->file->cont_id, name, obj_prop);
-    }
+    obj_id = PDCobj_create(o->file->cont_id, new_name, obj_prop);
     //obj_id = PDCobj_create_mpi(o->file->cont_id, name, obj_prop, 0, o->file->comm);
     
     dset->obj_id = obj_id;
+    fprintf(stderr, "dset_create dset->obj_id: %d\n", dset->obj_id);
 
     strcpy(dset->obj.obj_name, name);
     o->file->nobj++;
@@ -1106,7 +1113,7 @@ done:
 /*---------------------------------------------------------------------------*/
 static void *
 H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params,
-                      const char *name, hid_t dapl_id, hid_t dxpl_id,
+                      const char *_name, hid_t dapl_id, hid_t dxpl_id,
                       void **req)
 {
     fprintf(stderr, "\nentered dataset_open\n");
@@ -1114,6 +1121,25 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params,
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     H5VL_pdc_dset_t *dset = NULL;
     struct pdc_obj_info *obj_info;
+
+    int buff_len;
+    if (o->group_name) {
+        buff_len = strlen(_name) + strlen(o->file->file_name) + strlen(o->group_name) + 1;
+    } else {
+        buff_len = strlen(_name) + strlen(o->file->file_name) + 1;
+    }
+    char new_name[buff_len];
+
+    char name[buff_len];
+    //char new_name[strlen(name) + 1];
+    if (o->group_name) {
+        strcpy(name, _name);
+        strcat(name, o->group_name);
+        strcat(name, o->file->file_name);
+    } else {
+        strcpy(name, _name);
+        strcat(name, o->file->file_name);
+    }
     
     FUNC_ENTER_VOL(void *, NULL)
     
@@ -1164,6 +1190,8 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
     perr_t ret;
     
     FUNC_ENTER_VOL(herr_t, SUCCEED)
+
+    fprintf(stderr, "dset write obj_id: %d\n", dset->obj_id);
 
     if(file_space_id == H5S_ALL)
         file_space_id = dset->space_id;
@@ -1258,8 +1286,14 @@ herr_t H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id,
     dset->mapped = 1;
     if(PDC_INT == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj_id, region_xx);
-    else if(PDC_FLOAT == dset->obj.type)
+    else if(PDC_FLOAT == dset->obj.type) {
+        fprintf(stderr, "dataset_read is float type\n");
+        fprintf(stderr, "dset read obj_id: %lu\n", dset->obj_id);
+        fprintf(stderr, "dset read region_x: %lu\n", region_x);
+        fprintf(stderr, "dset read region_xx: %lu\n", region_xx);
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj_id, region_xx);
+        fprintf(stderr, "\n%f\n", ((float *)buf)[0]);
+    }
     else if(PDC_DOUBLE == dset->obj.type)
         PDCbuf_obj_map((void *)buf, PDC_DOUBLE, region_x, dset->obj_id, region_xx);
     else if(PDC_CHAR == dset->obj.type)
@@ -1580,10 +1614,11 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id, void *buf, hid_t dxpl_id, void
     perr_t               ret_value;
 
     //ret_value = H5VLattr_read(o->under_object, o->under_vol_id, mem_type_id, buf, dxpl_id, req);
-    ret_value = PDCobj_get_tag(o->obj_id, (char*)o->attr_name, (void*)buf, &(o->attr_value_size));
-    fprintf(stderr, "\nread o->attr_value_size: %d\n", o->attr_value_size);
-    fprintf(stderr, "\nread value: %d\n", *(int*)buf);
-    fprintf(stderr, "\nread attr name: %s\n", o->attr_name);
+    //ret_value = PDCobj_get_tag(o->obj_id, (char*)o->attr_name, (void*)buf, &(o->attr_value_size));
+    ret_value = PDCobj_get_tag(o->obj_id, (char*)o->attr_name, &tag_value, &(o->attr_value_size));
+    memcpy(buf, tag_value, o->attr_value_size);
+    if (tag_value)
+        free(tag_value);
     /* Check for async request */
     if (req && *req)
         *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
@@ -1603,9 +1638,6 @@ H5VL_pdc_attr_write(void *attr, hid_t mem_type_id, const void *buf, hid_t dxpl_i
 
     //ret_value = H5VLattr_write(o->under_object, o->under_vol_id, mem_type_id, buf, dxpl_id, req);
     ret_value = PDCobj_put_tag(o->obj_id, (char*)o->attr_name, (void*)buf, o->attr_value_size);
-    fprintf(stderr, "\no->attr_value_size: %d\n", o->attr_value_size);
-   fprintf(stderr, "\nwrite value: %d\n", *(int*)buf); 
-   fprintf(stderr, "\nwrite attr name: %s\n", o->attr_name);
     /* Check for async request */
     if (req && *req)
         *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
