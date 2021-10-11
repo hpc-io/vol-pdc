@@ -440,10 +440,12 @@ H5VL_pdc_info_copy(const void *_old_info)
     new_info->info = MPI_INFO_NULL;
     
     /* Duplicate communicator and Info object. */
-    //if(MPI_SUCCESS != MPI_Comm_dup(old_info->comm, &new_info->comm))
-    //    HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
-    //if(MPI_SUCCESS != MPI_Comm_set_errhandler(new_info->comm, MPI_ERRORS_RETURN))
-    //    HGOTO_ERROR(H5E_INTERNAL, H5E_CANTSET, NULL, "Cannot set MPI error handler");
+    if (old_info->comm && old_info->comm != MPI_COMM_NULL) {
+        if(MPI_SUCCESS != MPI_Comm_dup(old_info->comm, &new_info->comm))
+            HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
+        if(MPI_SUCCESS != MPI_Comm_set_errhandler(new_info->comm, MPI_ERRORS_RETURN))
+            HGOTO_ERROR(H5E_INTERNAL, H5E_CANTSET, NULL, "Cannot set MPI error handler");
+    }
     FUNC_RETURN_SET(new_info);
     
 done:
@@ -491,7 +493,9 @@ H5VL_pdc_info_free(void *_info)
     //if (MPI_COMM_NULL != info->comm)
         //MPI_Comm_free(&info->comm);
     //if (MPI_INFO_NULL != info->info)
-        //MPI_Info_free(&info->info);
+    //    MPI_Info_free(&info->info);
+    info->info = MPI_INFO_NULL;
+    info->comm = MPI_COMM_NULL;
     
     /* free the struct */
     free(info);
@@ -611,15 +615,15 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info)
         HGOTO_ERROR(H5E_RESOURCE, H5E_CANTALLOC, NULL, "can't copy file name");
     
     /* Duplicate communicator and Info object. */
-    if(info) {
-        //if(MPI_SUCCESS != MPI_Comm_dup(info->comm, &file->comm))
-        //    HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
-        //if((MPI_INFO_NULL != info->info)
-        //   && (MPI_SUCCESS != MPI_Info_dup(info->info, &file->info)))
-        //    HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Info duplicate failed");
+    if(info && info->comm && info->comm != MPI_COMM_NULL) {
+        if(MPI_SUCCESS != MPI_Comm_dup(info->comm, &file->comm))
+            HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
+        if((MPI_INFO_NULL != info->info)
+           && (MPI_SUCCESS != MPI_Info_dup(info->info, &file->info)))
+            HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Info duplicate failed");
     } else {
-        //if(MPI_SUCCESS != MPI_Comm_dup(MPI_COMM_WORLD, &file->comm))
-        //    HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
+        if(MPI_SUCCESS != MPI_Comm_dup(MPI_COMM_WORLD, &file->comm))
+            HGOTO_ERROR(H5E_INTERNAL, H5E_CANTCOPY, NULL, "Communicator duplicate failed");
     }
     
     /* Obtain the process rank and size from the communicator attached to the
@@ -627,8 +631,10 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info)
     //
     fprintf(stderr, "\nmpi_comm file pointer: %p\n", file);
     fflush(stdout);
-    //MPI_Comm_rank(file->comm, &file->my_rank);
-    //MPI_Comm_size(file->comm, &file->num_procs);
+    if (info->comm && info->comm != MPI_COMM_NULL) {
+        MPI_Comm_rank(file->comm, &file->my_rank);
+        MPI_Comm_size(file->comm, &file->num_procs);
+    }
     
     file->nobj = 0;
     
@@ -654,7 +660,8 @@ H5VL__pdc_file_close(H5VL_pdc_file_t *file)
     if(file->file_name)
         free(file->file_name);
     if(file->comm)
-        //MPI_Comm_free(&file->comm);
+        MPI_Comm_free(&file->comm);
+    file->comm = MPI_COMM_NULL;
     
     if(file->fapl_id != FAIL && H5Idec_ref(file->fapl_id) < 0)
         HDONE_ERROR(H5E_DATASET, H5E_CANTDEC, FAIL, "failed to close plist");
@@ -1013,18 +1020,21 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int buff_len;
     if (o->group_name) {
-        buff_len = strlen(name) + strlen(o->file->file_name) + strlen(o->group_name) + 1;
+        buff_len = strlen(name) + strlen(o->file->file_name) + strlen(o->group_name) + 3;
     } else {
-        buff_len = strlen(name) + strlen(o->file->file_name) + 1;
+        buff_len = strlen(name) + strlen(o->file->file_name) + 2;
     }
     char new_name[buff_len];
     //char new_name[strlen(name) + 1];
     if (o->group_name) {
         strcpy(new_name, name);
+        strcat(new_name, "/");
         strcat(new_name, o->group_name);
+        strcat(new_name, "/");
         strcat(new_name, o->file->file_name);
     } else {
         strcpy(new_name, name);
+        strcat(new_name, "/");
         strcat(new_name, o->file->file_name);
     }
     H5VL_pdc_dset_t *dset = NULL;
@@ -1089,8 +1099,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     /* Create PDC object */
     fflush(stdout);
     //todo add file name
-    obj_id = PDCobj_create(o->file->cont_id, new_name, obj_prop);
-    //obj_id = PDCobj_create_mpi(o->file->cont_id, name, obj_prop, 0, o->file->comm);
+    //obj_id = PDCobj_create(o->file->cont_id, new_name, obj_prop);
+    obj_id = PDCobj_create_mpi(o->file->cont_id, new_name, obj_prop, 0, o->file->comm);
     
     dset->obj_id = obj_id;
     fprintf(stderr, "dset_create dset->obj_id: %d\n", dset->obj_id);
@@ -1124,20 +1134,22 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params,
 
     int buff_len;
     if (o->group_name) {
-        buff_len = strlen(_name) + strlen(o->file->file_name) + strlen(o->group_name) + 1;
+        buff_len = strlen(_name) + strlen(o->file->file_name) + strlen(o->group_name) + 3;
     } else {
-        buff_len = strlen(_name) + strlen(o->file->file_name) + 1;
+        buff_len = strlen(_name) + strlen(o->file->file_name) + 2;
     }
-    char new_name[buff_len];
 
     char name[buff_len];
     //char new_name[strlen(name) + 1];
     if (o->group_name) {
         strcpy(name, _name);
+        strcat(name, "/");
         strcat(name, o->group_name);
+        strcat(name, "/");
         strcat(name, o->file->file_name);
     } else {
         strcpy(name, _name);
+        strcat(name, "/");
         strcat(name, o->file->file_name);
     }
     
@@ -1243,6 +1255,9 @@ herr_t H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id,
 
     if((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_WRITE)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't release lock");
+    if((ret = PDCbuf_obj_unmap(dset->obj_id, dset->obj.reg_id_to)) < 0) {
+        HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
+    }
 
 done:
     FUNC_LEAVE_VOL
@@ -1306,7 +1321,10 @@ herr_t H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id,
     
     if((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_READ)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't release lock");
-    
+    if((ret = PDCbuf_obj_unmap(dset->obj_id, dset->obj.reg_id_to)) < 0) {
+        HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
+    }
+
 done:
     FUNC_LEAVE_VOL
 } /* end H5VL_pdc_dataset_read() */
@@ -1388,11 +1406,6 @@ herr_t H5VL_pdc_dataset_close(void *_dset, hid_t dxpl_id, void **req)
     assert(dset);
     fprintf(stderr, "\ndset->obj_id: %lu\n", dset->obj_id);
     fflush(stdout);
-    if(dset->mapped == 1) {
-        if((ret = PDCbuf_obj_unmap(dset->obj_id, dset->obj.reg_id_to)) < 0) {
-            HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
-        }
-    }
     if((ret = PDCobj_close(dset->obj_id)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't close object");
     if(dset->obj.reg_id_from != 0) {
