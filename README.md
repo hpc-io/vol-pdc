@@ -1,4 +1,4 @@
-# Installing Instructions for Cori Machines
+# Installation Instructions for Cori Machines
 
 ## Install libfabric
 ```
@@ -89,3 +89,17 @@ CMakeLists.txt seem to be heavily adapted from the [mercury](https://github.com/
 9. press [c] to configure then exit
 10. cmake .. 
 ```
+
+# Notes
+
+The following functions have yet to be implemented and are either currently do nothing, or don't do anything relevant to the VOL:
+
+- H5VL_pdc_attr_get
+- H5VL_pdc_attr_close
+- H5VL_pdc_group_close
+- H5VL_pdc_group_get
+- H5VL_pdc_introspect_opt_query
+
+The following functions have been modified to work in the context of the VOL, but contain extraneous code that is either never called by the VOL or isn't relevant to the VOL:
+- H5VL_pdc_dataset_get
+- H5VL_pdc_file_specific
