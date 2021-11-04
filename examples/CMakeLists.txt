@@ -20,6 +20,7 @@ find_package(HDF5_VOL_PDC REQUIRED)
 #-----------------------------------------------------------------------------
 set(examples
   vpicio
+  vpicio_open
 )
 
 foreach (example ${examples})

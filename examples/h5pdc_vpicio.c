@@ -16,7 +16,7 @@ double uniform_random_number()
 }
 
 int main(int argc, char *argv[]) {
-    hid_t file_id, fapl_id;
+    hid_t file_id, group_id, fapl_id, lcpl, gcpl;
     hid_t dset_id1, dset_id2, dset_id3, dset_id4, dset_id5, dset_id6, dset_id7, dset_id8;
     hid_t r_dset_id1, r_dset_id2, r_dset_id3, r_dset_id4, r_dset_id5, r_dset_id6, r_dset_id7, r_dset_id8;
     hid_t filespace, memspace;
@@ -102,6 +102,15 @@ int main(int argc, char *argv[]) {
     
     memspace = H5Screate_simple (1, (hsize_t *) &numparticles, NULL);
     filespace = H5Screate_simple (1, (hsize_t *) &total_particles, NULL);
+
+    if((lcpl = H5Pcreate(H5P_LINK_CREATE)) < 0)
+        printf("lcpl H5Pcreate() error\n");
+    if((gcpl = H5Pcreate(H5P_GROUP_CREATE)) < 0)
+        printf("gcpl H5Pcreate() error\n");
+
+    /* Create group */
+    if((group_id = H5Gcreate2(file_id, "group1", lcpl, gcpl, H5P_DEFAULT)) < 0)
+        printf("H5Gcreate() error\n");
  
     /* Create dataset */
     dset_id1 = H5Dcreate(file_id, "x", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -217,9 +226,15 @@ int main(int argc, char *argv[]) {
         printf("H5Sclose memspace error\n");
     if(H5Sclose(filespace) < 0)
         printf("H5Sclose filespace error\n");
+    if(H5Gclose(group_id) < 0)
+        printf("H5Gclose error\n");
     if(H5Fclose(file_id) < 0)
         printf("H5Fclose error\n");
     if(H5Pclose(fapl_id) < 0)
+        printf("H5Pclose error\n");
+    if(H5Pclose(lcpl) < 0)
+        printf("H5Pclose error\n");
+    if(H5Pclose(gcpl) < 0)
         printf("H5Pclose error\n");
 
     if(my_rank == 0) {
