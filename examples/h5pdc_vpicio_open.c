@@ -20,7 +20,6 @@ int
 main(int argc, char *argv[])
 {
     hid_t    file_id, group_id, fapl_id;
-    hid_t    dset_id1, dset_id2, dset_id3, dset_id4, dset_id5, dset_id6, dset_id7, dset_id8;
     hid_t    r_dset_id1, r_dset_id2, r_dset_id3, r_dset_id4, r_dset_id5, r_dset_id6, r_dset_id7, r_dset_id8;
     hid_t    filespace, memspace;
     hid_t    attr1;
@@ -38,6 +37,7 @@ main(int argc, char *argv[])
     long      numparticles = 4;
     long long total_particles, offset;
 
+    float *xo;
     float *x, *y, *z;
     float *px, *py, *pz;
     int   *id1, *id2;
@@ -58,6 +58,8 @@ main(int argc, char *argv[])
     offset = 0;
     if (my_rank == 0)
         printf("Number of paritcles: %ld \n", numparticles);
+
+    xo = (float *)malloc(numparticles * sizeof(float));
 
     x = (float *)malloc(numparticles * sizeof(float));
     y = (float *)malloc(numparticles * sizeof(float));
@@ -128,6 +130,11 @@ main(int argc, char *argv[])
     ierr = H5Dread(r_dset_id8, H5T_NATIVE_INT, memspace, filespace, fapl_id, id2);
     if (ierr < 0)
         printf("read dset8 failed\n");
+
+    r_dset_id1 = H5Oopen(file_id, "x", H5P_DEFAULT);
+    ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xo);
+    if (ierr < 0)
+        printf("read dset1 w/ H5Oopen failed\n");
 
     fprintf(stderr, "\nx vals:\n");
     for (loop = 0; loop < numparticles; loop++) {

@@ -61,7 +61,8 @@ typedef struct H5VL_pdc_obj_t {
     hid_t                   under_vol_id;
     void                   *under_object;
     pdcid_t                 obj_id;
-    struct H5VL_pdc_file_t *file;
+    int                     obj_type;
+    char                   *file_name;
     char                    obj_name[ADDR_MAX];
     char                   *group_name;
     char                   *attr_name;
@@ -69,35 +70,21 @@ typedef struct H5VL_pdc_obj_t {
     pdc_var_type_t          type;
     pdcid_t                 reg_id_from;
     pdcid_t                 reg_id_to;
-} H5VL_pdc_obj_t;
-
-/* The file struct */
-typedef struct H5VL_pdc_file_t {
-    hid_t                   under_vol_id;
-    void                   *under_object;
-    pdcid_t                 obj_id;
-    struct H5VL_pdc_file_t *file;
-    char                   *file_name;
+    H5I_type_t              h5i_type;
+    /* File object elements */
     MPI_Comm                comm;
     MPI_Info                info;
     int                     my_rank;
     int                     num_procs;
     pdcid_t                 cont_id;
     int                     nobj;
-    H5_LIST_HEAD(H5VL_pdc_dset_t) ids;
-} H5VL_pdc_file_t;
-
-/* The dataset struct */
-typedef struct H5VL_pdc_dset_t {
-    hid_t          under_vol_id;
-    void          *under_object;
-    pdcid_t        obj_id;
-    H5VL_pdc_obj_t obj; /* Must be first */
+    H5_LIST_HEAD(H5VL_pdc_obj_t) ids;
+    /* Dataset object elements */
     hid_t          type_id;
     hid_t          space_id;
     hbool_t        mapped;
-    H5_LIST_ENTRY(H5VL_pdc_dset_t) entry;
-} H5VL_pdc_dset_t;
+    H5_LIST_ENTRY(H5VL_pdc_obj_t) entry;
+} H5VL_pdc_obj_t;
 
 /* PDC-specific file access properties */
 typedef struct H5VL_pdc_info_t {
@@ -165,6 +152,14 @@ static void  *H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params
 static herr_t H5VL_pdc_group_get(void *obj, H5VL_group_get_args_t *args, hid_t dxpl_id, void **req);
 static herr_t H5VL_pdc_group_close(void *grp, hid_t dxpl_id, void **req);
 
+/* Object callbacks */
+static void * H5VL_pdc_object_open(void *obj, const H5VL_loc_params_t *loc_params, H5I_type_t *opened_type, 
+                                    hid_t dxpl_id, void **req);
+static herr_t H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_get_args_t *args, 
+                                    hid_t dxpl_id, void **req);
+static herr_t H5VL_pdc_specific(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_specific_args_t *args, 
+                                    hid_t dxpl_id, void **req);
+
 /*******************/
 /* Local variables */
 /*******************/
@@ -196,15 +191,15 @@ static const H5VL_class_t H5VL_pdc_g = {
         NULL, /* free_wrap_ctx */
     },
     {
-        /* attribute_cls ADD*/
-        H5VL_pdc_attr_create, /* create ADD*/
-        H5VL_pdc_attr_open,   /* open ADD*/
-        H5VL_pdc_attr_read,   /* read ADD*/
-        H5VL_pdc_attr_write,  /* write ADD*/
-        H5VL_pdc_attr_get,    /* get ADD*/
+        /* attribute_cls */
+        H5VL_pdc_attr_create, /* create */
+        H5VL_pdc_attr_open,   /* open */
+        H5VL_pdc_attr_read,   /* read */
+        H5VL_pdc_attr_write,  /* write */
+        H5VL_pdc_attr_get,    /* get */
         NULL,                 /* specific */
         NULL,                 /* optional */
-        H5VL_pdc_attr_close   /* close ADD*/
+        H5VL_pdc_attr_close   /* close */
     },
     {
         /* dataset_cls  */
@@ -255,10 +250,10 @@ static const H5VL_class_t H5VL_pdc_g = {
     },
     {
         /* object_cls   */
-        NULL, /* open */
+        H5VL_pdc_object_open, /* open */
         NULL, /* copy */
-        NULL, /* get */
-        NULL, /* specific */
+        H5VL_pdc_object_get, /* get */
+        H5VL_pdc_specific, /* specific */
         NULL  /* optional */
     },
     {
@@ -581,7 +576,7 @@ H5VL_pdc_str_to_info(const char *str, void **_info)
 } /* end H5VL_pdc_str_to_info() */
 
 /*---------------------------------------------------------------------------*/
-static H5VL_pdc_file_t *
+static H5VL_pdc_obj_t *
 H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info, hid_t fapl_id)
 {
 #ifdef ENABLE_LOGGING
@@ -589,21 +584,21 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info, hid
     fflush(stdout);
 #endif
 
-    H5VL_pdc_file_t *file = NULL;
+    H5VL_pdc_obj_t *file = NULL;
 
     FUNC_ENTER_VOL(void *, NULL)
 
     /* allocate the file object that is returned to the user */
-    if (NULL == (file = malloc(sizeof(H5VL_pdc_file_t))))
+    if (NULL == (file = malloc(sizeof(H5VL_pdc_obj_t))))
         HGOTO_ERROR(H5E_FILE, H5E_CANTALLOC, NULL, "can't allocate PDC file struct");
-    memset(file, 0, sizeof(H5VL_pdc_file_t));
+    memset(file, 0, sizeof(H5VL_pdc_obj_t));
     file->info = MPI_INFO_NULL;
     file->comm = MPI_COMM_NULL;
-    file->file = file;
 
     /* Fill in fields of file we know */
     file->under_object = file;
     file->under_vol_id = H5VL_PDC_g;
+    file->h5i_type = H5I_FILE;
 
     if (NULL == (file->file_name = strdup(name)))
         HGOTO_ERROR(H5E_RESOURCE, H5E_CANTALLOC, NULL, "can't copy file name");
@@ -629,7 +624,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL__pdc_file_close(H5VL_pdc_file_t *file)
+H5VL__pdc_file_close(H5VL_pdc_obj_t *file)
 {
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "\nentered file_close\n");
@@ -654,7 +649,7 @@ H5VL__pdc_file_close(H5VL_pdc_file_t *file)
 } /* end H5VL__pdc_file_close() */
 
 /*---------------------------------------------------------------------------*/
-static H5VL_pdc_dset_t *
+static H5VL_pdc_obj_t *
 H5VL__pdc_dset_init(H5VL_pdc_obj_t *item)
 {
 #ifdef ENABLE_LOGGING
@@ -662,20 +657,21 @@ H5VL__pdc_dset_init(H5VL_pdc_obj_t *item)
     fflush(stdout);
 #endif
 
-    H5VL_pdc_dset_t *dset = NULL;
+    H5VL_pdc_obj_t *dset = NULL;
 
     FUNC_ENTER_VOL(void *, NULL)
 
     /* Allocate the dataset object that is returned to the user */
-    if (NULL == (dset = malloc(sizeof(H5VL_pdc_dset_t))))
+    if (NULL == (dset = malloc(sizeof(H5VL_pdc_obj_t))))
         HGOTO_ERROR(H5E_RESOURCE, H5E_CANTALLOC, NULL, "can't allocate PDC dataset struct");
-    memset(dset, 0, sizeof(H5VL_pdc_dset_t));
+    memset(dset, 0, sizeof(H5VL_pdc_obj_t));
 
-    dset->obj.reg_id_from = 0;
-    dset->obj.reg_id_to   = 0;
+    dset->reg_id_from     = 0;
+    dset->reg_id_to       = 0;
     dset->mapped          = 0;
     dset->type_id         = FAIL;
     dset->space_id        = FAIL;
+    dset->h5i_type = H5I_DATASET;
 
     /* Set return value */
     FUNC_RETURN_SET((void *)dset);
@@ -686,7 +682,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL__pdc_dset_free(H5VL_pdc_dset_t *dset)
+H5VL__pdc_dset_free(H5VL_pdc_obj_t *dset)
 {
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "\nentered dset_free\n");
@@ -748,7 +744,7 @@ H5VL_pdc_file_create(const char *name, unsigned flags, hid_t fcpl_id, hid_t fapl
 #endif
 
     H5VL_pdc_info_t *info;
-    H5VL_pdc_file_t *file = NULL;
+    H5VL_pdc_obj_t *file = NULL;
     pdcid_t          cont_prop;
 
     FUNC_ENTER_VOL(void *, NULL)
@@ -804,7 +800,7 @@ H5VL_pdc_file_open(const char *name, unsigned flags, hid_t fapl_id, hid_t dxpl_i
 #endif
 
     H5VL_pdc_info_t *info;
-    H5VL_pdc_file_t *file = NULL;
+    H5VL_pdc_obj_t *file = NULL;
 
     FUNC_ENTER_VOL(void *, NULL)
 
@@ -846,8 +842,8 @@ H5VL_pdc_file_close(void *_file, hid_t dxpl_id, void **req)
     fprintf(stderr, "\nentered file_close\n");
     fflush(stdout);
 #endif
-    H5VL_pdc_file_t *file = (H5VL_pdc_file_t *)_file;
-    H5VL_pdc_dset_t *dset = NULL;
+    H5VL_pdc_obj_t *file = (H5VL_pdc_obj_t *)_file;
+    H5VL_pdc_obj_t *dset = NULL;
     perr_t           ret;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
@@ -990,14 +986,17 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
                         hid_t type_id, hid_t space_id, hid_t dcpl_id, hid_t dapl_id, hid_t dxpl_id,
                         void **req)
 {
-
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "\nentered dataset_create\n");
+    fflush(stdout);
+#endif
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int             buff_len;
     if (o->group_name) {
-        buff_len = strlen(name) + strlen(o->file->file_name) + strlen(o->group_name) + 3;
+        buff_len = strlen(name) + strlen(o->file_name) + strlen(o->group_name) + 3;
     }
     else {
-        buff_len = strlen(name) + strlen(o->file->file_name) + 2;
+        buff_len = strlen(name) + strlen(o->file_name) + 2;
     }
     char new_name[buff_len];
     if (o->group_name) {
@@ -1005,14 +1004,18 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         strcat(new_name, "/");
         strcat(new_name, o->group_name);
         strcat(new_name, "/");
-        strcat(new_name, o->file->file_name);
+        strcat(new_name, o->file_name);
     }
     else {
         strcpy(new_name, name);
         strcat(new_name, "/");
-        strcat(new_name, o->file->file_name);
+        strcat(new_name, o->file_name);
     }
-    H5VL_pdc_dset_t *dset = NULL;
+    /* Assume that the name, group name, and file_name do not include multiple consecutive
+       slashes as a part of their names. */
+    replace_multi_slash(new_name);
+
+    H5VL_pdc_obj_t *dset = NULL;
     pdcid_t          obj_prop, obj_id;
     int              ndim;
     hsize_t          dims[H5S_MAX_RANK];
@@ -1041,22 +1044,22 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     obj_prop = PDCprop_create(PDC_OBJ_CREATE, pdc_id);
     if (H5Tequal(H5T_NATIVE_INT, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_INT);
-        dset->obj.type = PDC_INT;
+        dset->type = PDC_INT;
     }
     else if (H5Tequal(H5T_NATIVE_FLOAT, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
-        dset->obj.type = PDC_FLOAT;
+        dset->type = PDC_FLOAT;
     }
     else if (H5Tequal(H5T_NATIVE_DOUBLE, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_DOUBLE);
-        dset->obj.type = PDC_DOUBLE;
+        dset->type = PDC_DOUBLE;
     }
     else if (H5Tequal(H5T_NATIVE_CHAR, type_id) == TRUE) {
         PDCprop_set_obj_type(obj_prop, PDC_CHAR);
-        dset->obj.type = PDC_CHAR;
+        dset->type = PDC_CHAR;
     }
     else {
-        dset->obj.type = PDC_UNKNOWN;
+        dset->type = PDC_UNKNOWN;
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, NULL, "datatype is not supported yet");
     }
     /* Get dataspace extent */
@@ -1066,11 +1069,13 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get dimensions");
     PDCprop_set_obj_dims(obj_prop, ndim, dims);
     /* Create PDC object */
-    obj_id       = PDCobj_create_mpi(o->file->cont_id, new_name, obj_prop, 0, o->file->comm);
+    obj_id       = PDCobj_create_mpi(o->cont_id, new_name, obj_prop, 0, o->comm);
     dset->obj_id = obj_id;
-    strcpy(dset->obj.obj_name, name);
-    o->file->nobj++;
-    H5_LIST_INSERT_HEAD(&o->file->ids, dset, entry);
+    fprintf(stderr, "\nobj_id: %lu\n", obj_id);
+    dset->h5i_type = H5I_DATASET;
+    strcpy(dset->obj_name, name);
+    o->nobj++;
+    H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
 
     if ((PDCprop_close(obj_prop)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CANTCREATE, NULL, "can't close object property");
@@ -1093,15 +1098,15 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
 #endif
 
     H5VL_pdc_obj_t      *o    = (H5VL_pdc_obj_t *)obj;
-    H5VL_pdc_dset_t     *dset = NULL;
+    H5VL_pdc_obj_t     *dset = NULL;
     struct pdc_obj_info *obj_info;
 
     int buff_len;
     if (o->group_name) {
-        buff_len = strlen(_name) + strlen(o->file->file_name) + strlen(o->group_name) + 3;
+        buff_len = strlen(_name) + strlen(o->file_name) + strlen(o->group_name) + 3;
     }
     else {
-        buff_len = strlen(_name) + strlen(o->file->file_name) + 2;
+        buff_len = strlen(_name) + strlen(o->file_name) + 2;
     }
 
     char name[buff_len];
@@ -1110,16 +1115,16 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
         strcat(name, "/");
         strcat(name, o->group_name);
         strcat(name, "/");
-        strcat(name, o->file->file_name);
-        /* Assume that the name, group name, and file_name do not include multiple consecutive
-           slashes as a part of their names. */
-        replace_multi_slash(name);
+        strcat(name, o->file_name);
     }
     else {
         strcpy(name, _name);
         strcat(name, "/");
-        strcat(name, o->file->file_name);
+        strcat(name, o->file_name);
     }
+    /* Assume that the name, group name, and file_name do not include multiple consecutive
+       slashes as a part of their names. */
+    replace_multi_slash(name);
 
     FUNC_ENTER_VOL(void *, NULL)
 
@@ -1134,14 +1139,19 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     if (NULL == (dset = H5VL__pdc_dset_init(o)))
         HGOTO_ERROR(H5E_DATASET, H5E_CANTINIT, NULL, "can't init PDC dataset struct");
 
-    strcpy(dset->obj.obj_name, name);
-    dset->obj_id    = PDCobj_open(name, pdc_id);
+    strcpy(dset->obj_name, name);
+    dset->obj_id    = PDCobj_open_col(name, pdc_id);
+    if (dset->obj_id <= 0) {
+        free(dset);
+        return NULL;
+    }
+    dset->under_vol_id = o->under_vol_id;
     pdcid_t id_name = (pdcid_t)name;
     obj_info        = PDCobj_get_info(dset->obj_id);
     dset->space_id  = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
-    dset->obj.type  = obj_info->obj_pt->type;
-    o->file->nobj++;
-    H5_LIST_INSERT_HEAD(&o->file->ids, dset, entry);
+    dset->type  = obj_info->obj_pt->type;
+    o->nobj++;
+    H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
 
     /* Set return value */
     FUNC_RETURN_SET((void *)dset);
@@ -1160,7 +1170,7 @@ H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t
     fflush(stdout);
 #endif
 
-    H5VL_pdc_dset_t *dset = (H5VL_pdc_dset_t *)_dset;
+    H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
     uint64_t        *offset;
     size_t           type_size;
     int              ndim;
@@ -1196,24 +1206,24 @@ H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data dimension not supported");
     region_x              = PDCregion_create(ndim, offset, dims);
-    dset->obj.reg_id_from = region_x;
+    dset->reg_id_from = region_x;
 
     type_size = H5Tget_size(mem_type_id);
     H5VL__pdc_sel_to_recx_iov(file_space_id, type_size, offset);
 
     region_xx           = PDCregion_create(ndim, offset, dims);
-    dset->obj.reg_id_to = region_xx;
+    dset->reg_id_to = region_xx;
     free(offset);
 
     dset->mapped = 1;
 
-    if (PDC_INT == dset->obj.type)
+    if (PDC_INT == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj_id, region_xx);
-    else if (PDC_FLOAT == dset->obj.type)
+    else if (PDC_FLOAT == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj_id, region_xx);
-    else if (PDC_DOUBLE == dset->obj.type)
+    else if (PDC_DOUBLE == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_DOUBLE, region_x, dset->obj_id, region_xx);
-    else if (PDC_CHAR == dset->obj.type)
+    else if (PDC_CHAR == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_CHAR, region_x, dset->obj_id, region_xx);
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
@@ -1223,7 +1233,7 @@ H5VL_pdc_dataset_write(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t
 
     if ((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_WRITE)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't release lock");
-    if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->obj.reg_id_to)) < 0) {
+    if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->reg_id_to)) < 0) {
         HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
     }
 
@@ -1241,7 +1251,7 @@ H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t 
     fflush(stdout);
 #endif
 
-    H5VL_pdc_dset_t *dset = (H5VL_pdc_dset_t *)_dset;
+    H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
     size_t           type_size;
     uint64_t        *offset;
     int              ndim;
@@ -1260,24 +1270,24 @@ H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t 
     offset                = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
     offset[0]             = 0;
     region_x              = PDCregion_create(ndim, offset, dims);
-    dset->obj.reg_id_from = region_x;
+    dset->reg_id_from = region_x;
 
     type_size = H5Tget_size(mem_type_id);
     H5VL__pdc_sel_to_recx_iov(file_space_id, type_size, offset);
 
     region_xx           = PDCregion_create(ndim, offset, dims);
-    dset->obj.reg_id_to = region_xx;
+    dset->reg_id_to = region_xx;
     free(offset);
 
     dset->mapped = 1;
-    if (PDC_INT == dset->obj.type)
+    if (PDC_INT == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_INT, region_x, dset->obj_id, region_xx);
-    else if (PDC_FLOAT == dset->obj.type) {
+    else if (PDC_FLOAT == dset->type) {
         PDCbuf_obj_map((void *)buf, PDC_FLOAT, region_x, dset->obj_id, region_xx);
     }
-    else if (PDC_DOUBLE == dset->obj.type)
+    else if (PDC_DOUBLE == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_DOUBLE, region_x, dset->obj_id, region_xx);
-    else if (PDC_CHAR == dset->obj.type)
+    else if (PDC_CHAR == dset->type)
         PDCbuf_obj_map((void *)buf, PDC_CHAR, region_x, dset->obj_id, region_xx);
     else
         HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
@@ -1287,7 +1297,7 @@ H5VL_pdc_dataset_read(void *_dset, hid_t mem_type_id, hid_t mem_space_id, hid_t 
 
     if ((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_READ)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't release lock");
-    if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->obj.reg_id_to)) < 0) {
+    if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->reg_id_to)) < 0) {
         HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
     }
 
@@ -1304,7 +1314,7 @@ H5VL_pdc_dataset_get(void *_dset, H5VL_dataset_get_args_t *args, hid_t dxpl_id, 
     fflush(stdout);
 #endif
 
-    H5VL_pdc_dset_t *dset = (H5VL_pdc_dset_t *)_dset;
+    H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1361,7 +1371,7 @@ H5VL_pdc_dataset_close(void *_dset, hid_t dxpl_id, void **req)
     fflush(stdout);
 #endif
 
-    H5VL_pdc_dset_t *dset = (H5VL_pdc_dset_t *)_dset;
+    H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
     perr_t           ret;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
@@ -1369,12 +1379,12 @@ H5VL_pdc_dataset_close(void *_dset, hid_t dxpl_id, void **req)
     assert(dset);
     if ((ret = PDCobj_close(dset->obj_id)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't close object");
-    if (dset->obj.reg_id_from != 0) {
-        if ((ret = PDCregion_close(dset->obj.reg_id_from)) < 0)
+    if (dset->reg_id_from != 0) {
+        if ((ret = PDCregion_close(dset->reg_id_from)) < 0)
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't close region");
     }
-    if (dset->obj.reg_id_to != 0) {
-        if ((ret = PDCregion_close(dset->obj.reg_id_to) < 0))
+    if (dset->reg_id_to != 0) {
+        if ((ret = PDCregion_close(dset->reg_id_to) < 0))
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't close remote region");
     }
 
@@ -1462,12 +1472,12 @@ H5VL_pdc_group_create(void *obj, const H5VL_loc_params_t *loc_params, const char
     H5VL_pdc_obj_t *group;
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     void           *under;
-    char           *group_name = (char *)malloc(strlen(name) + 1);
+    char           *group_name = (char *)calloc(1, strlen(name) + 1);
     strcpy(group_name, name);
 
     group             = H5VL_pdc_new_obj(under, o->under_vol_id);
-    group->file       = o->file;
     group->group_name = group_name;
+    group->h5i_type = H5I_GROUP;
 
     /* Check for async request */
     if (req && *req)
@@ -1493,8 +1503,8 @@ H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params, const char *
     strcpy(group_name, name);
 
     group             = H5VL_pdc_new_obj(under, o->under_vol_id);
-    group->file       = o->file;
     group->group_name = group_name;
+    group->h5i_type = H5I_GROUP;
 
     /* Check for async request */
     if (req && *req)
@@ -1549,6 +1559,7 @@ H5VL_pdc_attr_create(void *obj, const H5VL_loc_params_t *loc_params, const char 
     value_size            = H5Sget_select_npoints(space_id) * H5Tget_size(type_id);
     attr->attr_value_size = value_size;
     attr->obj_id          = o->obj_id;
+    attr->h5i_type        = H5I_ATTR;
 
     /* Check for async request */
     if (req && *req)
@@ -1659,3 +1670,92 @@ H5VL_pdc_attr_close(void *attr, hid_t dxpl_id, void **req)
 
     return ret_value;
 } /* end H5VL_pdc_attr_close() */
+
+/*---------------------------------------------------------------------------*/
+static void *
+H5VL_pdc_object_open(void *obj, const H5VL_loc_params_t *loc_params,
+    H5I_type_t *opened_type, hid_t dxpl_id, void **req)
+{
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "\nentered object_open\n");
+    fflush(stdout);
+#endif
+
+    H5VL_pdc_obj_t *new_obj;
+    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
+    void *under;
+
+    /* Only support dataset open and group open for now. */
+    new_obj = H5VL_pdc_dataset_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+    if (new_obj == NULL) {
+        new_obj = H5VL_pdc_group_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+    }
+
+    if(req && *req)
+        *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
+
+    return (void*)new_obj;
+
+
+    if (o->h5i_type == H5I_DATASET) {
+        new_obj = H5VL_pdc_dataset_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+    } else if (loc_params->obj_type== H5I_GROUP) {
+        new_obj = H5VL_pdc_group_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+    } else if (loc_params->obj_type == H5I_FILE) {
+        new_obj = H5VL_pdc_attr_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+    } else {
+        new_obj = NULL;
+    }
+    if(req && *req)
+        *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
+
+    return (void *)new_obj;
+} /* end H5VL_pdc_object_open() */
+
+/*---------------------------------------------------------------------------*/
+static herr_t
+H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_get_args_t *args, hid_t dxpl_id, void **req)
+{
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "\nentered object_get\n");
+    fflush(stdout);
+#endif
+
+    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
+    herr_t ret_value;
+
+    ret_value = H5VLobject_get(o->under_object, loc_params, o->under_vol_id, args, dxpl_id, req);
+
+    /* Check for async request */
+    if(req && *req)
+        *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
+
+    return ret_value;
+} /* end H5VL_pdc_object_get() */
+
+/*---------------------------------------------------------------------------*/
+static herr_t
+H5VL_pdc_specific(void *obj, const H5VL_loc_params_t *loc_params,
+    H5VL_object_specific_args_t *args, hid_t dxpl_id, void **req)
+{
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "\nentered object_specific\n");
+    fflush(stdout);
+#endif
+
+    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
+    hid_t under_vol_id;
+    herr_t ret_value;
+
+    // Save copy of underlying VOL connector ID and prov helper, in case of
+    // refresh destroying the current object
+    under_vol_id = o->under_vol_id;
+
+    ret_value = H5VLobject_specific(o->under_object, loc_params, o->under_vol_id, args, dxpl_id, req);
+
+    /* Check for async request */
+    if(req && *req)
+        *req = H5VL_pdc_new_obj(*req, under_vol_id);
+
+    return ret_value;
+} /* end H5VL_pdc_object_specific() */
