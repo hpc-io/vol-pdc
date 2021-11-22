@@ -585,8 +585,11 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info, hid
 #endif
 
     H5VL_pdc_obj_t *file = NULL;
+    hid_t under_vol_id;
 
     FUNC_ENTER_VOL(void *, NULL)
+
+    H5Pget_vol_id(fapl_id, &under_vol_id);
 
     /* allocate the file object that is returned to the user */
     if (NULL == (file = malloc(sizeof(H5VL_pdc_obj_t))))
@@ -597,7 +600,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags, H5VL_pdc_info_t *info, hid
 
     /* Fill in fields of file we know */
     file->under_object = file;
-    file->under_vol_id = H5VL_PDC_g;
+    file->under_vol_id = under_vol_id;
     file->h5i_type = H5I_FILE;
 
     if (NULL == (file->file_name = strdup(name)))
@@ -750,8 +753,6 @@ H5VL_pdc_file_create(const char *name, unsigned flags, hid_t fcpl_id, hid_t fapl
     FUNC_ENTER_VOL(void *, NULL)
 
     assert(name);
-    hid_t under_vol_id;
-    H5Pget_vol_id(fapl_id, &under_vol_id);
 
     /* Get information from the FAPL */
     if (H5Pget_vol_info(fapl_id, (void **)&info) < 0)
@@ -992,6 +993,9 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
 #endif
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int             buff_len;
+
+    FUNC_ENTER_VOL(void *, NULL)
+
     if (o->group_name) {
         buff_len = strlen(name) + strlen(o->file_name) + strlen(o->group_name) + 3;
     }
@@ -1019,8 +1023,6 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     pdcid_t          obj_prop, obj_id;
     int              ndim;
     hsize_t          dims[H5S_MAX_RANK];
-
-    FUNC_ENTER_VOL(void *, NULL)
 
     if (!obj)
         HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, NULL, "parent object is NULL");
@@ -1097,6 +1099,8 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     fflush(stdout);
 #endif
 
+    FUNC_ENTER_VOL(void *, NULL)
+
     H5VL_pdc_obj_t      *o    = (H5VL_pdc_obj_t *)obj;
     H5VL_pdc_obj_t     *dset = NULL;
     struct pdc_obj_info *obj_info;
@@ -1126,8 +1130,6 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
        slashes as a part of their names. */
     replace_multi_slash(name);
 
-    FUNC_ENTER_VOL(void *, NULL)
-
     if (!obj)
         HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, NULL, "parent object is NULL");
     if (!loc_params)
@@ -1146,6 +1148,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
         return NULL;
     }
     dset->under_vol_id = o->under_vol_id;
+    dset->under_object = dset;
     pdcid_t id_name = (pdcid_t)name;
     obj_info        = PDCobj_get_info(dset->obj_id);
     dset->space_id  = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
@@ -1689,6 +1692,11 @@ H5VL_pdc_object_open(void *obj, const H5VL_loc_params_t *loc_params,
     new_obj = H5VL_pdc_dataset_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
     if (new_obj == NULL) {
         new_obj = H5VL_pdc_group_open(obj, loc_params, loc_params->loc_data.loc_by_name.name, 0, dxpl_id, req);
+        if (new_obj != NULL)
+            *opened_type = H5I_GROUP;
+    }
+    else {
+        *opened_type = H5I_DATASET;
     }
 
     if(req && *req)

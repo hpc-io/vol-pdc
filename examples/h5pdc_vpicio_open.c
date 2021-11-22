@@ -131,11 +131,6 @@ main(int argc, char *argv[])
     if (ierr < 0)
         printf("read dset8 failed\n");
 
-    r_dset_id1 = H5Oopen(file_id, "x", H5P_DEFAULT);
-    ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xo);
-    if (ierr < 0)
-        printf("read dset1 w/ H5Oopen failed\n");
-
     fprintf(stderr, "\nx vals:\n");
     for (loop = 0; loop < numparticles; loop++) {
         fprintf(stderr, "%f ", x[loop]);
@@ -167,6 +162,24 @@ main(int argc, char *argv[])
     fprintf(stderr, "\nid2 vals:\n");
     for (loop = 0; loop < numparticles; loop++) {
         fprintf(stderr, "%i ", id2[loop]);
+    }
+    fprintf(stderr, "\n");
+
+    if (H5Dclose(r_dset_id1) < 0)
+        printf("H5Dclose dataset error\n");
+
+    r_dset_id1 = H5Oopen(file_id, "x", H5P_DEFAULT);
+    if (r_dset_id1 <= 0) {
+        fprintf(stderr, "Error with H5Oopen!\n");
+    }
+
+    ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xo);
+    if (ierr < 0)
+        printf("read dset1 w/ H5Oopen failed\n");
+
+    fprintf(stderr, "\nOopen x vals:\n");
+    for (loop = 0; loop < numparticles; loop++) {
+        fprintf(stderr, "%f ", x[loop]);
     }
 
     attr1 = H5Aopen(r_dset_id1, "Integer attribute", H5P_DEFAULT);
