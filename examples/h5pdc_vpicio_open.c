@@ -87,6 +87,14 @@ main(int argc, char *argv[])
 
     if ((group_id = H5Gopen1(file_id, "group1")) < 0)
         printf("H5Gopen() error\n");
+    if (H5Gclose(group_id) < 0)
+        printf("H5Gclose error\n");
+
+    if ((group_id = H5Oopen(file_id, "group1", H5P_DEFAULT)) < 0) {
+        fprintf(stderr, "Error with H5Oopen!\n");
+    }
+    if (H5Oclose(group_id) < 0)
+        printf("H5Oclose group error\n");
 
     memspace  = H5Screate_simple(1, (hsize_t *)&numparticles, NULL);
     filespace = H5Screate_simple(1, (hsize_t *)&total_particles, NULL);
@@ -196,7 +204,23 @@ main(int argc, char *argv[])
     if (ierr < 0)
         printf("close attr1 failed\n");
 
-    if (H5Dclose(r_dset_id1) < 0)
+    /* test combinations of object open */
+    if (H5Dclose(r_dset_id8) < 0)
+        printf("H5Dclose dataset error\n");
+    r_dset_id8 = H5Oopen(file_id, "id2", H5P_DEFAULT);
+    if (r_dset_id1 <= 0) {
+        fprintf(stderr, "Error with H5Oopen!\n");
+    }
+    ierr = H5Dread(r_dset_id8, H5T_NATIVE_INT, memspace, filespace, fapl_id, id2);
+    if (ierr < 0)
+        printf("read dset8 failed\n");
+    if ((group_id = H5Oopen(file_id, "group1", H5P_DEFAULT)) < 0) {
+        fprintf(stderr, "Error with H5Oopen!\n");
+    }
+    if (H5Oclose(group_id) < 0)
+        printf("H5Oclose group error\n");
+
+    if (H5Oclose(r_dset_id1) < 0)
         printf("H5Dclose dataset error\n");
     if (H5Dclose(r_dset_id2) < 0)
         printf("H5Dclose dataset error\n");
@@ -210,15 +234,13 @@ main(int argc, char *argv[])
         printf("H5Dclose dataset error\n");
     if (H5Dclose(r_dset_id7) < 0)
         printf("H5Dclose dataset error\n");
-    if (H5Dclose(r_dset_id8) < 0)
+    if (H5Oclose(r_dset_id8) < 0)
         printf("H5Dclose dataset error\n");
 
     if (H5Sclose(memspace) < 0)
         printf("H5Sclose memspace error\n");
     if (H5Sclose(filespace) < 0)
         printf("H5Sclose filespace error\n");
-    if (H5Gclose(group_id) < 0)
-        printf("H5Gclose error\n");
     if (H5Fclose(file_id) < 0)
         printf("H5Fclose error\n");
     if (H5Pclose(fapl_id) < 0)
