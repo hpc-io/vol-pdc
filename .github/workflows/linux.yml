@@ -42,7 +42,7 @@ jobs:
           sudo apt-get install libtool
           sudo apt install cmake
           # hdf5
-          git clone https://github.com/HDFGroup/hdf5.git
+          git clone --depth 1 https://github.com/HDFGroup/hdf5.git
           # libfabric 1.12.1
           wget https://github.com/ofiwg/libfabric/archive/refs/tags/v1.12.1.tar.gz
           tar xf v1.12.1.tar.gz
@@ -55,7 +55,7 @@ jobs:
           # python3
           sudo apt-get install python3
           # pdc
-          git clone https://github.com/hpc-io/pdc.git
+          git clone --depth 1 https://github.com/hpc-io/pdc.git
           
       - name: Installation
         run: |
@@ -77,7 +77,7 @@ jobs:
           ./autogen.sh
           ./configure --prefix=$HDF5_DIR --enable-parallel --enable-threadsafe --enable-unsupported \
           --disable-tests --disable-hl --disable-fortran 
-          make && make install
+          make -j2 && make install
 
           # Compile libfabric
           mkdir $LIBFABRIC_DIR
@@ -92,15 +92,15 @@ jobs:
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
           git submodule update --init
-          cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF -DCMAKE_C_FLAGS="-dynamic"
+          cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF
           make -j2 && sudo make install
           ctest
 
           # Compile PDC
           mkdir $PDC_DIR
           cd $PDC_DIR
-          cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DCMAKE_C_FLAGS="-dynamic"
-          make && sudo make install
+          cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
+          make -j2 && sudo make install
 
           # Compile VOL-PDC
           cd $VOL_DIR
