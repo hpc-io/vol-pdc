@@ -22,16 +22,17 @@ class VolPdc(CMakePackage):
     version('0.1', sha256='1619b5defc4b5988f93ca0a8ec06518bf38f48d0bc66cd7db3612ea9f3e4f298')
 
     conflicts('%clang')
-    depends_on('hdf5@1.12')
-    depends_on('pdc')
-
-    root_cmakelists_dir = 'src'
+    depends_on('hdf5@develop-1.13+mpi+threadsafe%gcc')
+    depends_on('pdc%gcc')
+    depends_on('mpi%gcc')
 
     def cmake_args(self):
         args = [
             self.define('MPI_C_COMPILER', self.spec['mpi'].mpicc),
-            self.define('BUILD_SHARED_LIBS', 'ON')
+            self.define('BUILD_SHARED_LIBS', 'ON'),
+            self.define('CMAKE_C_COMPILER', self.spec['mpi'].mpicc)
         ]
         if self.spec.satisfies('platform=cray'):
             args.append("-DRANKSTR_LINK_STATIC=ON")
+
         return args
