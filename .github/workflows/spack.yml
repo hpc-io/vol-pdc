@@ -1,0 +1,56 @@
+name: spack 
+
+on:
+  pull_request:
+    branches: [ main ]
+
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      
+  # Allows to run this workflow manually from the Actions tab
+  workflow_dispatch:
+jobs:
+  vol-pdc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup
+        run: |
+          voldir="$PWD"
+          voldirbase="$(basename $(pwd))"
+          cd ..
+          mkdir vol-pdc-workspace
+          cd vol-pdc-workspace
+          workspace="$PWD"
+          mv $voldir $workspace
+          cd ..
+          mv ./vol-pdc-workspace ./vol-pdc
+          cd vol-pdc/vol-pdc 
+          export VOL_DIR="$PWD"
+          cd ..
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          # spack
+          git clone https://github.com/spack/spack.git
+
+          
+      - name: Installation
+        run: |
+          source spack/share/spack/setup-env.sh
+          cd vol-pdc
+          spack repo add spack
+          spack install vol-pdc
+
+          
+      - name: Compile and Test VOL-PDC
+        run: |
+          # TODO
