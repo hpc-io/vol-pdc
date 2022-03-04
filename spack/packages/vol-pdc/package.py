@@ -22,9 +22,9 @@ class VolPdc(CMakePackage):
     version('0.1', sha256='1619b5defc4b5988f93ca0a8ec06518bf38f48d0bc66cd7db3612ea9f3e4f298')
 
     conflicts('%clang')
-    depends_on('hdf5@develop-1.13+mpi+threadsafe%gcc')
-    depends_on('pdc%gcc')
-    depends_on('mpi%gcc')
+    depends_on('hdf5@develop-1.13+mpi+threadsafe')
+    depends_on('pdc')
+    depends_on('mpi')
 
     def cmake_args(self):
         args = [
