@@ -238,7 +238,9 @@ if(BUILD_EXAMPLES)
   foreach (example ${examples})
     add_executable (h5pdc_${example}
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/h5pdc_${example}.c
-  )
+    )
+    target_link_libraries(h5pdc_${example} hdf5_vol_pdc)
+  endforeach()
 endif()
 
 #-----------------------------------------------------------------------------
