@@ -92,6 +92,7 @@ jobs:
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
           git submodule update --init
+          git checkout v2.2.0
           cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF
           make -j2 && sudo make install
           ctest
@@ -99,6 +100,7 @@ jobs:
           # Compile PDC
           mkdir $PDC_DIR
           cd $PDC_DIR
+          git checkout develop
           cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
           make -j2 && sudo make install
 
