@@ -47,7 +47,7 @@ jobs:
           wget https://github.com/ofiwg/libfabric/archive/refs/tags/v1.12.1.tar.gz
           tar xf v1.12.1.tar.gz
           # mercury
-          git clone https://github.com/mercury-hpc/mercury.git 
+          git clone https://github.com/mercury-hpc/mercury.git --recursive
           # mpi
           sudo apt-get install libopenmpi-dev
           # zlib
@@ -55,7 +55,8 @@ jobs:
           # python3
           sudo apt-get install python3
           # pdc
-          git clone --depth 1 https://github.com/hpc-io/pdc.git
+          git clone https://github.com/hpc-io/pdc.git
+
           
       - name: Installation
         run: |
@@ -66,7 +67,7 @@ jobs:
           export VOL_DIR=$mydir/vol-pdc
           export MERCURY_DIR=$mydir/mercury/install
           export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
-          export PDC_DIR=$mydir/pdc/src/install
+          export PDC_DIR=$mydir/pdc/install
           export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
           export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MERCURY_DIR/lib:$PATH"
           
@@ -91,7 +92,6 @@ jobs:
           # Compile Mercury
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
-          git submodule update --init
           git checkout v2.2.0
           cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF
           make -j2 && sudo make install
@@ -100,7 +100,7 @@ jobs:
           # Compile PDC
           mkdir $PDC_DIR
           cd $PDC_DIR
-          git checkout develop
+          git checkout develop          
           cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
           make -j2 && sudo make install
 
@@ -121,7 +121,7 @@ jobs:
           export HDF5_DIR=$mydir/hdf5/install
           export MERCURY_DIR=$mydir/mercury/install
           export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
-          export PDC_DIR=$mydir/pdc/src/install
+          export PDC_DIR=$mydir/pdc/install
           export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
           export HDF5_PLUGIN_PATH="$VOL_DIR/build/bin"
           export HDF5_VOL_CONNECTOR="pdc under_vol=0;under_info={}"
