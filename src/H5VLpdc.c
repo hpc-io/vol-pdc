@@ -131,10 +131,10 @@ static void * H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_pa
                                       hid_t dapl_id, hid_t dxpl_id, void **req);
 static void * H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char *name,
                                     hid_t dapl_id, hid_t dxpl_id, void **req);
-static herr_t H5VL_pdc_dataset_read(size_t count, void *dset[], hid_t mem_type_id[], hid_t mem_space_id[], hid_t file_space_id[],
-                                    hid_t plist_id, void *buf[], void **req);
-static herr_t H5VL_pdc_dataset_write(size_t count, void *dset[], hid_t mem_type_id[], hid_t mem_space_id[], hid_t file_space_id[],
-                                     hid_t plist_id, const void *buf[], void **req);
+static herr_t H5VL_pdc_dataset_read(size_t count, void *dset[], hid_t mem_type_id[], hid_t mem_space_id[],
+                                    hid_t file_space_id[], hid_t plist_id, void *buf[], void **req);
+static herr_t H5VL_pdc_dataset_write(size_t count, void *dset[], hid_t mem_type_id[], hid_t mem_space_id[],
+                                     hid_t file_space_id[], hid_t plist_id, const void *buf[], void **req);
 static herr_t H5VL_pdc_dataset_get(void *dset, H5VL_dataset_get_args_t *args, hid_t dxpl_id, void **req);
 static herr_t H5VL_pdc_dataset_specific(void *obj, H5VL_dataset_specific_args_t *args, hid_t dxpl_id,
                                         void **req);
@@ -520,7 +520,7 @@ H5VL_pdc_info_copy(const void *_old_info)
         HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, NULL, "memory allocation failed");
 
     new_info->under_vol_info = old_info->under_vol_info;
-    new_info->under_vol_id = old_info->under_vol_id;
+    new_info->under_vol_id   = old_info->under_vol_id;
 
     FUNC_RETURN_SET(new_info);
 
@@ -1003,7 +1003,7 @@ H5VL_pdc_file_specific(void *file, H5VL_file_specific_args_t *args, hid_t dxpl_i
     H5VL_file_specific_args_t *new_args;
     H5VL_pdc_info_t *          info;
     hid_t                      under_vol_id = -1;
-    herr_t                     ret_value = 0;
+    herr_t                     ret_value    = 0;
 
     if (args->op_type == H5VL_FILE_IS_ACCESSIBLE) {
 
@@ -1288,9 +1288,9 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     dset->under_vol_id = o->under_vol_id;
     dset->under_object = dset;
     /* pdcid_t id_name    = (pdcid_t)name; */
-    obj_info           = PDCobj_get_info(dset->obj_id);
-    dset->space_id     = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
-    dset->type         = obj_info->obj_pt->type;
+    obj_info       = PDCobj_get_info(dset->obj_id);
+    dset->space_id = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
+    dset->type     = obj_info->obj_pt->type;
     o->nobj++;
     H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
 
@@ -1303,7 +1303,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 herr_t
-H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t mem_space_id[], 
+H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t mem_space_id[],
                        hid_t file_space_id[], hid_t plist_id, const void *buf[], void **req)
 {
 #ifdef ENABLE_LOGGING
@@ -1360,8 +1360,9 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         free(offset);
 
 #ifdef USE_REGION_TRANSFER
-        transfer_request = PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id, region_x, region_xx);
-        ret              = PDCregion_transfer_start(transfer_request);
+        transfer_request =
+            PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id, region_x, region_xx);
+        ret = PDCregion_transfer_start(transfer_request);
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "Failed to region transfer start");
         }
@@ -1404,7 +1405,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 herr_t
-H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t mem_space_id[], 
+H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t mem_space_id[],
                       hid_t file_space_id[], hid_t plist_id, void *buf[], void **req)
 {
 #ifdef ENABLE_LOGGING
@@ -1423,7 +1424,7 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    for(size_t u = 0; u < count; u++) {
+    for (size_t u = 0; u < count; u++) {
         dset = (H5VL_pdc_obj_t *)_dset[u];
         /* Get memory dataspace object */
         if ((ndim = H5Sget_simple_extent_ndims(mem_space_id[u])) < 0)
@@ -1444,8 +1445,9 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
         free(offset);
 
 #ifdef USE_REGION_TRANSFER
-        transfer_request = PDCregion_transfer_create((void *)buf[u], PDC_READ, dset->obj_id, region_x, region_xx);
-        ret              = PDCregion_transfer_start(transfer_request);
+        transfer_request =
+            PDCregion_transfer_create((void *)buf[u], PDC_READ, dset->obj_id, region_x, region_xx);
+        ret = PDCregion_transfer_start(transfer_request);
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "Failed to region transfer start");
         }
@@ -1708,8 +1710,8 @@ H5VL_pdc_group_create(void *obj, const H5VL_loc_params_t *loc_params, const char
 #endif
 
     H5VL_pdc_obj_t *group;
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    void *          under = NULL;
+    H5VL_pdc_obj_t *o          = (H5VL_pdc_obj_t *)obj;
+    void *          under      = NULL;
     char *          group_name = (char *)calloc(1, strlen(name) + 1);
     strcpy(group_name, name);
 
@@ -1743,8 +1745,8 @@ H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params, const char *
 #endif
 
     H5VL_pdc_obj_t *group;
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    void *          under = NULL;
+    H5VL_pdc_obj_t *o          = (H5VL_pdc_obj_t *)obj;
+    void *          under      = NULL;
     char *          group_name = (char *)malloc(strlen(name) + 1);
     strcpy(group_name, name);
 
@@ -1865,7 +1867,7 @@ H5VL_pdc_attr_create(void *obj, const H5VL_loc_params_t *loc_params, const char 
 #endif
 
     H5VL_pdc_obj_t *attr;
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
+    H5VL_pdc_obj_t *o     = (H5VL_pdc_obj_t *)obj;
     void *          under = NULL;
     psize_t         value_size;
 
@@ -1894,8 +1896,8 @@ H5VL_pdc_attr_open(void *obj, const H5VL_loc_params_t *loc_params, const char *n
     fflush(stdout);
 #endif
     H5VL_pdc_obj_t *attr;
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    void *          under = NULL;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)obj;
+    void *          under     = NULL;
     char *          attr_name = (char *)malloc(strlen(name) + 1);
     strcpy(attr_name, name);
     o->attr_name = attr_name;
@@ -1917,10 +1919,11 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id, void *buf, hid_t dxpl_id, void
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
     void *          tag_value;
     /* psize_t *       value_size; */
-    perr_t          ret_value;
-    pdc_var_type_t  value_type;
+    perr_t         ret_value;
+    pdc_var_type_t value_type;
 
-    ret_value = PDCobj_get_tag(o->obj_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
+    ret_value =
+        PDCobj_get_tag(o->obj_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
     memcpy(buf, tag_value, o->attr_value_size);
     if (tag_value)
         free(tag_value);
@@ -1998,7 +2001,7 @@ H5VL_pdc_attr_close(void *attr, hid_t dxpl_id, void **req)
 #endif
 
     /* H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr; */
-    herr_t          ret_value;
+    herr_t ret_value;
     ret_value = 0;
 
     return ret_value;
