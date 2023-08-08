@@ -60,12 +60,12 @@ main(int argc, char *argv[])
     if (my_rank == 0)
         printf("Number of paritcles: %ld \n", numparticles);
 
-    x = (float *)malloc(numparticles * sizeof(float));
-    y = (float *)malloc(numparticles * sizeof(float));
-    z = (float *)malloc(numparticles * sizeof(float));
-    px = (float *)malloc(numparticles * sizeof(float));
-    py = (float *)malloc(numparticles * sizeof(float));
-    pz = (float *)malloc(numparticles * sizeof(float));
+    x   = (float *)malloc(numparticles * sizeof(float));
+    y   = (float *)malloc(numparticles * sizeof(float));
+    z   = (float *)malloc(numparticles * sizeof(float));
+    px  = (float *)malloc(numparticles * sizeof(float));
+    py  = (float *)malloc(numparticles * sizeof(float));
+    pz  = (float *)malloc(numparticles * sizeof(float));
     id1 = (int *)malloc(numparticles * sizeof(int));
     id2 = (int *)malloc(numparticles * sizeof(int));
 
@@ -112,7 +112,7 @@ main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
     etime = MPI_Wtime();
     if (my_rank == 0)
-        printf("File/Group/Dataset create took %.2f seconds\n", etime-stime);
+        printf("File/Group/Dataset create took %.2f seconds\n", etime - stime);
 
     dxpl_id = H5Pcreate(H5P_DATASET_XFER);
     H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
@@ -149,7 +149,7 @@ main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
     etime = MPI_Wtime();
     if (my_rank == 0)
-        printf("Dataset write took %.2f seconds\n", etime-stime);
+        printf("Dataset write took %.2f seconds\n", etime - stime);
 
     r_dset_id1 = H5Dopen2(file_id, "id1", H5P_DEFAULT);
     r_dset_id2 = H5Dopen2(file_id, "id2", H5P_DEFAULT);
@@ -176,8 +176,8 @@ main(int argc, char *argv[])
     }
 
     for (loop = 0; loop < numparticles; loop++) {
-        if (id2[loop] != loop*2) {
-            fprintf(stderr, "Error id2: %d / %d\n", id2[loop], loop*2);
+        if (id2[loop] != loop * 2) {
+            fprintf(stderr, "Error id2: %d / %d\n", id2[loop], loop * 2);
             break;
         }
     }
