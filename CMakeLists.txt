@@ -300,8 +300,8 @@ install(
 
 install(
   FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/h5pdc_vpicio
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/h5pdc_vpicio_open
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/h5pdc_vpicio
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/h5pdc_vpicio_open
   DESTINATION
     ${CMAKE_INSTALL_PREFIX}/bin
 )
