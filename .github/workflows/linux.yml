@@ -109,7 +109,7 @@ jobs:
           cd $VOL_DIR
           mkdir build
           cd build
-          cmake ../ -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR
+          cmake ../ -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR -DPDC_DIR=$PDC_DIR
           make && sudo make install
           
       - name: Compile and Test VOL-PDC
