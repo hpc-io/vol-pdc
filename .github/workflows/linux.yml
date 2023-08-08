@@ -68,7 +68,7 @@ jobs:
           export MERCURY_DIR=$mydir/mercury/install
           export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
           export PDC_DIR=$mydir/pdc/install
-          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$LD_LIBRARY_PATH"
           export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MERCURY_DIR/lib:$PATH"
           
           # Compile HDF5
@@ -100,8 +100,6 @@ jobs:
           # Compile PDC
           mkdir $PDC_DIR
           cd $PDC_DIR
-          git checkout develop
-          git checkout fix120
           cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
           make -j2 && sudo make install
 
@@ -109,32 +107,15 @@ jobs:
           cd $VOL_DIR
           mkdir build
           cd build
-          cmake ../ -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR -DPDC_DIR=$PDC_DIR/share/cmake/pdc
+          cmake ../ -DCMAKE_INSTALL_PREFIX=$VOL_DIR/install -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR -DPDC_DIR=$PDC_DIR/share/cmake/pdc -DBUILD_EXAMPLES=ON
           make && sudo make install
-          
-      - name: Compile and Test VOL-PDC
-        run: |
-          mydir="$PWD"
 
-          # Set Environmental Variables
-          export VOL_DIR=$mydir/vol-pdc
-          export H5_DIR=$mydir/hdf5
-          export HDF5_DIR=$mydir/hdf5/install
-          export MERCURY_DIR=$mydir/mercury/install
-          export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
-          export PDC_DIR=$mydir/pdc/install
-          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
-          export HDF5_PLUGIN_PATH="$VOL_DIR/build/bin"
+          export HDF5_PLUGIN_PATH=$VOL_DIR/install/lib
           export HDF5_VOL_CONNECTOR="pdc under_vol=0;under_info={}"
-
-          # Compile example
-          cd $VOL_DIR/examples
-          cmake .
-          make
           
           # Run test
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/pdc_server.exe &
-          mpirun -N 1 -n 1 -c 1 ./h5pdc_vpicio test
+          mpirun -N 1 -n 1 -c 1 ./bin/h5pdc_vpicio test
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/close_server
           
       - name: Setup tmate session
