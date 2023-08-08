@@ -135,3 +135,7 @@ jobs:
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/pdc_server.exe &
           mpirun -N 1 -n 1 -c 1 ./h5pdc_vpicio test
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/close_server
+          
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
