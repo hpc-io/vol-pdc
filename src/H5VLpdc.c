@@ -37,7 +37,7 @@
 #define H5VL_PDC_SEQ_LIST_LEN 128
 /* (Uncomment to enable) */
 //#define ENABLE_LOGGING
-#define USE_REGION_TRANSFER
+#define USE_REGION_TRANSFER 1
 
 /* Remove warnings when connector does not use callback arguments */
 #if defined(__cplusplus)
@@ -1312,7 +1312,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
 #endif
 
     H5VL_pdc_obj_t *dset;
-    uint64_t *      offset;
+    uint64_t *      offset = NULL;
     size_t          type_size;
     int             ndim;
     pdcid_t         region_x, region_xx;
@@ -1349,15 +1349,19 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         }
         else
             HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data dimension not supported");
+
+        /* printf("Rank %d: mem offset %lu\n", dset->my_rank, offset[0]); */
+        /* printf("Rank %d: mem count  %lu\n", dset->my_rank, dims[0]); */
         region_x          = PDCregion_create(ndim, offset, dims);
         dset->reg_id_from = region_x;
 
         type_size = H5Tget_size(mem_type_id[u]);
         H5VL__pdc_sel_to_recx_iov(file_space_id[u], type_size, offset);
 
+        /* printf("Rank %d: file offset %lu\n", dset->my_rank, offset[0]); */
+        /* printf("Rank %d: file count  %lu\n", dset->my_rank, dims[0]); */
         region_xx       = PDCregion_create(ndim, offset, dims);
         dset->reg_id_to = region_xx;
-        free(offset);
 
 #ifdef USE_REGION_TRANSFER
         transfer_request =
@@ -1397,6 +1401,8 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
         }
 #endif
+        if (offset)
+            free(offset);
     }
 
 done:
