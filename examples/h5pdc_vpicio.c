@@ -34,7 +34,7 @@ main(int argc, char *argv[])
     my_rank   = 0;
     num_procs = 1;
     // Variables and dimensions
-    long numparticles = 8388608;    // 8  meg particles per process
+    long numparticles = 8388608; // 8  meg particles per process
     /* long      numparticles = 4; */
     long long total_particles, offset;
 
