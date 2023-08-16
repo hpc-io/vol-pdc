@@ -68,7 +68,7 @@ jobs:
           export MERCURY_DIR=$mydir/mercury/install
           export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
           export PDC_DIR=$mydir/pdc/install
-          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$VOL_DIR/install/lib:$LD_LIBRARY_PATH"
           export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MERCURY_DIR/lib:$PATH"
           
           # Compile HDF5
