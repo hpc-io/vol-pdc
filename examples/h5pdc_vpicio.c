@@ -19,9 +19,9 @@ uniform_random_number()
 int
 main(int argc, char *argv[])
 {
-    hid_t    file_id, group_id, fapl_id, lcpl, gcpl;
+    hid_t    file_id, group_id, fapl_id, dxpl_id;
     hid_t    dset_id1, dset_id2, dset_id3, dset_id4, dset_id5, dset_id6, dset_id7, dset_id8;
-    hid_t    r_dset_id1, r_dset_id2, r_dset_id3, r_dset_id4, r_dset_id5, r_dset_id6, r_dset_id7, r_dset_id8;
+    hid_t    r_dset_id1, r_dset_id2;
     hid_t    filespace, memspace;
     hid_t    attr1;
     hid_t    aid1;
@@ -34,24 +34,18 @@ main(int argc, char *argv[])
     my_rank   = 0;
     num_procs = 1;
     // Variables and dimensions
-    // long numparticles = 8388608;    // 8  meg particles per process
-    long      numparticles = 4;
+    long numparticles = 8388608; // 8  meg particles per process
+    /* long      numparticles = 4; */
     long long total_particles, offset;
 
     float *x, *y, *z;
-    float *xr;
     float *px, *py, *pz;
     int *  id1, *id2;
     int    x_dim = 64;
     int    y_dim = 64;
     int    z_dim = 64;
-    int    i, j;
-
-    float matrix[ADIM1][ADIM2];   /* Attribute data */
-    for (i = 0; i < ADIM1; i++) { /* Values of the array attribute */
-        for (j = 0; j < ADIM2; j++)
-            matrix[i][j] = -1.;
-    }
+    int    i;
+    double stime, etime;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_dup(MPI_COMM_WORLD, &comm);
@@ -66,16 +60,12 @@ main(int argc, char *argv[])
     if (my_rank == 0)
         printf("Number of paritcles: %ld \n", numparticles);
 
-    x = (float *)malloc(numparticles * sizeof(float));
-    y = (float *)malloc(numparticles * sizeof(float));
-    z = (float *)malloc(numparticles * sizeof(float));
-
-    xr = (float *)malloc(numparticles * sizeof(float));
-
-    px = (float *)malloc(numparticles * sizeof(float));
-    py = (float *)malloc(numparticles * sizeof(float));
-    pz = (float *)malloc(numparticles * sizeof(float));
-
+    x   = (float *)malloc(numparticles * sizeof(float));
+    y   = (float *)malloc(numparticles * sizeof(float));
+    z   = (float *)malloc(numparticles * sizeof(float));
+    px  = (float *)malloc(numparticles * sizeof(float));
+    py  = (float *)malloc(numparticles * sizeof(float));
+    pz  = (float *)malloc(numparticles * sizeof(float));
     id1 = (int *)malloc(numparticles * sizeof(int));
     id2 = (int *)malloc(numparticles * sizeof(int));
 
@@ -95,24 +85,18 @@ main(int argc, char *argv[])
         printf("H5Pcreate() error\n");
     H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
 
-    /* Initialize VOL */
-    //    pdc_vol_id = H5VLregister_connector_by_name("pdc", H5P_DEFAULT);   // not used if choosing to use
-    //    environmental variable
+    memspace  = H5Screate_simple(1, (hsize_t *)&numparticles, NULL);
+    filespace = H5Screate_simple(1, (hsize_t *)&total_particles, NULL);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    stime = MPI_Wtime();
 
     /* Create file */
     if ((file_id = H5Fcreate(argv[1], H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id)) < 0)
         printf("H5Fcreate() error\n");
 
-    memspace  = H5Screate_simple(1, (hsize_t *)&numparticles, NULL);
-    filespace = H5Screate_simple(1, (hsize_t *)&total_particles, NULL);
-
-    if ((lcpl = H5Pcreate(H5P_LINK_CREATE)) < 0)
-        printf("lcpl H5Pcreate() error\n");
-    if ((gcpl = H5Pcreate(H5P_GROUP_CREATE)) < 0)
-        printf("gcpl H5Pcreate() error\n");
-
     /* Create group */
-    if ((group_id = H5Gcreate2(file_id, "group1", lcpl, gcpl, H5P_DEFAULT)) < 0)
+    if ((group_id = H5Gcreate2(file_id, "group1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)) < 0)
         printf("H5Gcreate() error\n");
 
     /* Create dataset */
@@ -125,63 +109,78 @@ main(int argc, char *argv[])
     dset_id7 = H5Dcreate(file_id, "id1", H5T_NATIVE_INT, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     dset_id8 = H5Dcreate(file_id, "id2", H5T_NATIVE_INT, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    fapl_id = H5Pcreate(H5P_DATASET_XFER);
-    H5Pset_dxpl_mpio(fapl_id, H5FD_MPIO_COLLECTIVE);
+    MPI_Barrier(MPI_COMM_WORLD);
+    etime = MPI_Wtime();
+    if (my_rank == 0)
+        printf("File/Group/Dataset create took %.2f seconds\n", etime - stime);
+
+    dxpl_id = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
     H5Sselect_hyperslab(filespace, H5S_SELECT_SET, (hsize_t *)&offset, NULL, (hsize_t *)&numparticles, NULL);
 
     MPI_Barrier(comm);
-    ierr = H5Dwrite(dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, x);
+    stime = MPI_Wtime();
+
+    ierr = H5Dwrite(dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, x);
     if (ierr < 0)
         printf("write x failed\n");
-    ierr = H5Dwrite(dset_id2, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, y);
+    ierr = H5Dwrite(dset_id2, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, y);
     if (ierr < 0)
         printf("write y failed\n");
-    ierr = H5Dwrite(dset_id3, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, z);
+    ierr = H5Dwrite(dset_id3, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, z);
     if (ierr < 0)
         printf("write z failed\n");
-    ierr = H5Dwrite(dset_id4, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, px);
+    ierr = H5Dwrite(dset_id4, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, px);
     if (ierr < 0)
         printf("write px failed\n");
-    ierr = H5Dwrite(dset_id5, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, py);
+    ierr = H5Dwrite(dset_id5, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, py);
     if (ierr < 0)
         printf("write py failed\n");
-    ierr = H5Dwrite(dset_id6, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, pz);
+    ierr = H5Dwrite(dset_id6, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, pz);
     if (ierr < 0)
         printf("write pz failed\n");
-    ierr = H5Dwrite(dset_id7, H5T_NATIVE_INT, memspace, filespace, fapl_id, id1);
+    ierr = H5Dwrite(dset_id7, H5T_NATIVE_INT, memspace, filespace, dxpl_id, id1);
     if (ierr < 0)
         printf("write id1 failed\n");
-    ierr = H5Dwrite(dset_id8, H5T_NATIVE_INT, memspace, filespace, fapl_id, id2);
+    ierr = H5Dwrite(dset_id8, H5T_NATIVE_INT, memspace, filespace, dxpl_id, id2);
     if (ierr < 0)
         printf("write id2 failed\n");
 
-    r_dset_id1 = H5Dopen2(file_id, "x", H5P_DEFAULT);
-    // r_dset_id2 = H5Dopen2(file_id, "y", H5P_DEFAULT);
-    // r_dset_id3 = H5Dopen2(file_id, "z", H5P_DEFAULT);
-    // r_dset_id4 = H5Dopen2(file_id, "px", H5P_DEFAULT);
-    // r_dset_id5 = H5Dopen2(file_id, "py", H5P_DEFAULT);
-    // r_dset_id6 = H5Dopen2(file_id, "pz", H5P_DEFAULT);
-    // r_dset_id7 = H5Dopen2(file_id, "id1", H5P_DEFAULT);
-    // r_dset_id8 = H5Dopen2(file_id, "id2", H5P_DEFAULT);
+    MPI_Barrier(MPI_COMM_WORLD);
+    etime = MPI_Wtime();
+    if (my_rank == 0)
+        printf("Dataset write took %.2f seconds\n", etime - stime);
 
-    ierr = H5Dread(dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xr);
+    r_dset_id1 = H5Dopen2(file_id, "id1", H5P_DEFAULT);
+    r_dset_id2 = H5Dopen2(file_id, "id2", H5P_DEFAULT);
+
+    ierr = H5Dread(r_dset_id1, H5T_NATIVE_INT, memspace, filespace, dxpl_id, id1);
     if (ierr < 0)
         printf("read dset1 failed\n");
 
-    fprintf(stderr, "\nxr vals:\n");
+    ierr = H5Dread(r_dset_id2, H5T_NATIVE_INT, memspace, filespace, dxpl_id, id2);
+    if (ierr < 0)
+        printf("read r_dset2 failed\n");
+
+    if (H5Dclose(r_dset_id1) < 0)
+        printf("H5Dclose dataset1 error\n");
+
+    if (H5Dclose(r_dset_id2) < 0)
+        printf("H5Dclose dataset2 error\n");
+
     for (loop = 0; loop < numparticles; loop++) {
-        fprintf(stderr, "%f ", xr[loop]);
-    }
-    fprintf(stderr, "\nx vals:\n");
-    for (loop = 0; loop < numparticles; loop++) {
-        fprintf(stderr, "%f ", x[loop]);
+        if (id1[loop] != loop) {
+            fprintf(stderr, "Error id1: %d / %d\n", id1[loop], loop);
+            break;
+        }
     }
 
-    ierr = H5Dread(r_dset_id1, H5T_NATIVE_FLOAT, memspace, filespace, fapl_id, xr);
-    if (ierr < 0)
-        printf("read r_dset1 failed\n");
-    if (H5Dclose(r_dset_id1) < 0)
-        printf("H5Dclose dataset8 error\n");
+    for (loop = 0; loop < numparticles; loop++) {
+        if (id2[loop] != loop * 2) {
+            fprintf(stderr, "Error id2: %d / %d\n", id2[loop], loop * 2);
+            break;
+        }
+    }
 
     /* create attribute */
     aid1  = H5Screate(H5S_SCALAR);
@@ -234,9 +233,7 @@ main(int argc, char *argv[])
         printf("H5Fclose error\n");
     if (H5Pclose(fapl_id) < 0)
         printf("H5Pclose error\n");
-    if (H5Pclose(lcpl) < 0)
-        printf("H5Pclose error\n");
-    if (H5Pclose(gcpl) < 0)
+    if (H5Pclose(dxpl_id) < 0)
         printf("H5Pclose error\n");
 
     if (my_rank == 0) {
@@ -252,7 +249,6 @@ main(int argc, char *argv[])
     free(id1);
     free(id2);
 
-    free(xr);
-    (void)MPI_Finalize();
+    MPI_Finalize();
     return 0;
 }

@@ -42,12 +42,12 @@ jobs:
           sudo apt-get install libtool
           sudo apt install cmake
           # hdf5
-          git clone --depth 1 https://github.com/HDFGroup/hdf5.git
+          git clone https://github.com/HDFGroup/hdf5.git
           # libfabric 1.12.1
           wget https://github.com/ofiwg/libfabric/archive/refs/tags/v1.12.1.tar.gz
           tar xf v1.12.1.tar.gz
           # mercury
-          git clone https://github.com/mercury-hpc/mercury.git 
+          git clone https://github.com/mercury-hpc/mercury.git --recursive
           # mpi
           sudo apt-get install libopenmpi-dev
           # zlib
@@ -55,7 +55,8 @@ jobs:
           # python3
           sudo apt-get install python3
           # pdc
-          git clone --depth 1 https://github.com/hpc-io/pdc.git
+          git clone https://github.com/hpc-io/pdc.git
+
           
       - name: Installation
         run: |
@@ -66,17 +67,17 @@ jobs:
           export VOL_DIR=$mydir/vol-pdc
           export MERCURY_DIR=$mydir/mercury/install
           export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
-          export PDC_DIR=$mydir/pdc/src/install
-          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
+          export PDC_DIR=$mydir/pdc/install
+          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$VOL_DIR/install/lib:$LD_LIBRARY_PATH"
           export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MERCURY_DIR/lib:$PATH"
           
           # Compile HDF5
           mkdir $HDF5_DIR
           cd hdf5
+          git checkout hdf5-1_14_1-2
           export HDF5_LIBTOOL=/usr/bin/libtoolize
           ./autogen.sh
-          ./configure --prefix=$HDF5_DIR --enable-parallel --enable-threadsafe --enable-unsupported \
-          --disable-tests --disable-hl --disable-fortran 
+          ./configure CC=mpicc --prefix=$HDF5_DIR --enable-parallel --disable-tests --disable-hl --disable-fortran 
           make -j2 && make install
 
           # Compile libfabric
@@ -91,45 +92,34 @@ jobs:
           # Compile Mercury
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
-          git submodule update --init
-          cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF
+          git checkout v2.1.0
+          cmake ../  -DCMAKE_C_COMPILER=gcc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF -DMERCURY_USE_CHECKSUMS=OFF
           make -j2 && sudo make install
           ctest
 
           # Compile PDC
           mkdir $PDC_DIR
           cd $PDC_DIR
-          cmake ../ -DBUILD_MPI_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
+          git checkout develop
+          cmake ../ -DBUILD_MPI_TESTING=ON -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$PDC_DIR -DPDC_ENABLE_MPI=ON -DMERCURY_DIR=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc
           make -j2 && sudo make install
 
           # Compile VOL-PDC
           cd $VOL_DIR
           mkdir build
           cd build
-          cmake ../ -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR
+          cmake ../ -DCMAKE_INSTALL_PREFIX=$VOL_DIR/install -DHDF5_INCLUDE_DIR=$HDF5_INCLUDE_DIR -DHDF5_LIBRARY=$HDF5_LIBRARY -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR -DPDC_DIR=$PDC_DIR/share/cmake/pdc -DBUILD_EXAMPLES=ON
           make && sudo make install
-          
-      - name: Compile and Test VOL-PDC
-        run: |
-          mydir="$PWD"
 
-          # Set Environmental Variables
-          export VOL_DIR=$mydir/vol-pdc
-          export H5_DIR=$mydir/hdf5
-          export HDF5_DIR=$mydir/hdf5/install
-          export MERCURY_DIR=$mydir/mercury/install
-          export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
-          export PDC_DIR=$mydir/pdc/src/install
-          export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$LD_LIBRARY_PATH"
-          export HDF5_PLUGIN_PATH="$VOL_DIR/build/bin"
+          export HDF5_PLUGIN_PATH=$VOL_DIR/install/lib
           export HDF5_VOL_CONNECTOR="pdc under_vol=0;under_info={}"
-
-          # Compile example
-          cd $VOL_DIR/examples
-          cmake .
-          make
+          export LD_PRELOAD=$VOL_DIR/install/lib/libhdf5_vol_pdc.so
           
           # Run test
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/pdc_server.exe &
-          mpirun -N 1 -n 1 -c 1 ./h5pdc_vpicio test
+          mpirun -N 1 -n 1 -c 1 ./bin/h5pdc_vpicio test
           mpirun -N 1 -n 1 -c 1 $PDC_DIR/bin/close_server
+          
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
