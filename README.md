@@ -37,6 +37,20 @@ cd build
 cmake ../ -DCMAKE_INSTALL_PREFIX=$VOL_DIR -DBUILD_SHARED_LIBS=ON -DHDF5_DIR=$HDF5_DIR -DPDC_DIR=$PDC_DIR/share/cmake/pdc -DBUILD_EXAMPLES=ON
 ```
 
+## Using vol-pdc
+To utilize PDC via the PDC VOL connector, the following environment variables should be set:
+
+```
+export HDF5_PLUGIN_PATH=$VOL_DIR/lib
+export HDF5_VOL_CONNECTOR="pdc under_vol=0;under_info={}"
+export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$VOL_DIR/lib:$LD_LIBRARY_PATH"
+# Optional
+export LD_PRELOAD=$VOL_DIR/install/lib/libhdf5_vol_pdc.so
+```
+
+PDC servers must be launched before the application, more details can be found in the [PDC documentation website](https://pdc.readthedocs.io/en/latest/getting_started.html#running-pdc).
+
+
 # Notes
 
 The following functions have yet to be implemented and either currently do nothing, or don't do anything relevant to the VOL:
