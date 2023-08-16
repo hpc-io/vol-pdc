@@ -77,8 +77,7 @@ jobs:
           git checkout hdf5-1_14_1-2
           export HDF5_LIBTOOL=/usr/bin/libtoolize
           ./autogen.sh
-          ./configure -DCMAKE_C_COMPILER=mpicc --prefix=$HDF5_DIR --enable-parallel --enable-threadsafe --enable-unsupported \
-          --disable-tests --disable-hl --disable-fortran 
+          ./configure CC=mpicc --prefix=$HDF5_DIR --enable-parallel --disable-tests --disable-hl --disable-fortran 
           make -j2 && make install
 
           # Compile libfabric
