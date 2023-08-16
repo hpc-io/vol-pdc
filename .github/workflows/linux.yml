@@ -92,7 +92,7 @@ jobs:
           # Compile Mercury
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
-          git checkout v2.2.0
+          git checkout v2.1.0
           cmake ../ -DCMAKE_INSTALL_PREFIX=$MERCURY_DIR -DCMAKE_C_COMPILER=mpicc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF
           make -j2 && sudo make install
           ctest
