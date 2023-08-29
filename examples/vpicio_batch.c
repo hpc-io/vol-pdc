@@ -5,6 +5,7 @@
 #include <math.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 herr_t ierr;
 hid_t file_id, dset_id, fapl;
@@ -46,7 +47,7 @@ void init_particles ()
 	}
 }
 
-void create_h5_datasets(int rank, int i)
+void create_h5_datasets(int i)
 {
     char dname[128];
     sprintf(dname, "step%d_x", i);
@@ -67,7 +68,7 @@ void create_h5_datasets(int rank, int i)
     dsets[7] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
 }
 
-void write_h5_datasets(int rank)
+void write_h5_datasets()
 {
     ierr = H5Dwrite(dsets[0], H5T_NATIVE_FLOAT, memspace, filespace, plist_id, x);
     assert(ierr == 0);
@@ -87,7 +88,7 @@ void write_h5_datasets(int rank)
     assert(ierr == 0);
 }
 
-void close_h5_datasets(int rank)
+void close_h5_datasets()
 {
     H5Dclose(dsets[0]);
     H5Dclose(dsets[1]);
@@ -150,8 +151,7 @@ int main (int argc, char* argv[])
 {
     int my_rank, num_procs, nstep, i, sleeptime;
     MPI_Comm comm = MPI_COMM_WORLD;
-    MPI_Info info  = MPI_INFO_NULL;
-    double t0, t1, t2, t3;
+    double t0, t1, t2, t3, tw = 0;
 
     MPI_Init(&argc,&argv);
     MPI_Comm_rank (comm, &my_rank);
@@ -224,34 +224,32 @@ int main (int argc, char* argv[])
     MPI_Barrier (comm);
     t0 = MPI_Wtime();
 
-
     file_id = H5Fcreate(argv[1], H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
     assert (file_id >= 0);
 
     if (my_rank == 0)
         printf ("Created HDF5 file [%s] \n", argv[1]);
 
-
     for (i = 0; i < nstep; i++) {
 
-        MPI_Barrier (comm);
-        t1 = MPI_Wtime();
-
         filespace = H5Screate_simple(1, (hsize_t *) &total_particles, NULL);
-        create_h5_datasets(my_rank, i);
+        create_h5_datasets(i);
 
         H5Sselect_hyperslab(filespace, H5S_SELECT_SET, (hsize_t *) &offset, NULL,
                             (hsize_t *) &numparticles, NULL);
 
-        write_h5_datasets(my_rank);
+        MPI_Barrier (comm);
+        t1 = MPI_Wtime();
 
-        close_h5_datasets(my_rank);
-
-        H5Sclose(filespace);
+        write_h5_datasets();
 
         MPI_Barrier (comm);
         t2 = MPI_Wtime();
         if (my_rank == 0) printf ("Wrote one file, took %.2f\n", t2-t1);
+        tw += (t2-t1);
+
+        close_h5_datasets();
+        H5Sclose(filespace);
         
         if (my_rank == 0) printf ("Sleep %d\n", sleeptime);
         fflush(stdout);
@@ -267,7 +265,7 @@ int main (int argc, char* argv[])
 
     MPI_Barrier (comm);
     t3 = MPI_Wtime();
-    if (my_rank == 0) printf ("Wrote %d files, took %.2f, actual write took %.2f\n", nstep, t3-t0, t2-t0-sleeptime*(nstep-1));
+    if (my_rank == 0) printf ("Wrote %d steps, took %.2f, actual write took %.2f\n", nstep, t3-t0, tw);
 
     free(x); free(y); free(z);
     free(px); free(py); free(pz);
