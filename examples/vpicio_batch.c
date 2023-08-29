@@ -164,11 +164,11 @@ main(int argc, char *argv[])
 {
     int      my_rank, num_procs, nstep, i, sleeptime;
     MPI_Comm comm = MPI_COMM_WORLD;
-    double t0, t1, t2, t3, tw = 0;
+    double   t0, t1, t2, t3, tw = 0;
 
-    MPI_Init(&argc,&argv);
-    MPI_Comm_rank (comm, &my_rank);
-    MPI_Comm_size (comm, &num_procs);
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(comm, &my_rank);
+    MPI_Comm_size(comm, &num_procs);
 
     if (argc >= 3)
         numparticles = (atoi(argv[2])) * 1024 * 1024;
@@ -240,30 +240,32 @@ main(int argc, char *argv[])
     assert(file_id >= 0);
 
     if (my_rank == 0)
-        printf ("Created HDF5 file [%s] \n", argv[1]);
+        printf("Created HDF5 file [%s] \n", argv[1]);
 
     for (i = 0; i < nstep; i++) {
 
-        filespace = H5Screate_simple(1, (hsize_t *) &total_particles, NULL);
+        filespace = H5Screate_simple(1, (hsize_t *)&total_particles, NULL);
         create_h5_datasets(i);
 
         H5Sselect_hyperslab(filespace, H5S_SELECT_SET, (hsize_t *)&offset, NULL, (hsize_t *)&numparticles,
                             NULL);
 
-        MPI_Barrier (comm);
+        MPI_Barrier(comm);
         t1 = MPI_Wtime();
 
         write_h5_datasets();
 
         MPI_Barrier(comm);
         t2 = MPI_Wtime();
-        if (my_rank == 0) printf ("Wrote one file, took %.2f\n", t2-t1);
-        tw += (t2-t1);
+        if (my_rank == 0)
+            printf("Wrote one file, took %.2f\n", t2 - t1);
+        tw += (t2 - t1);
 
         close_h5_datasets();
         H5Sclose(filespace);
-        
-        if (my_rank == 0) printf ("Sleep %d\n", sleeptime);
+
+        if (my_rank == 0)
+            printf("Sleep %d\n", sleeptime);
         fflush(stdout);
         if (i < nstep - 1)
             sleep(sleeptime);
@@ -277,7 +279,8 @@ main(int argc, char *argv[])
 
     MPI_Barrier(comm);
     t3 = MPI_Wtime();
-    if (my_rank == 0) printf ("Wrote %d steps, took %.2f, actual write took %.2f\n", nstep, t3-t0, tw);
+    if (my_rank == 0)
+        printf("Wrote %d steps, took %.2f, actual write took %.2f\n", nstep, t3 - t0, tw);
 
     free(x);
     free(y);
