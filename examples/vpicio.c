@@ -158,7 +158,7 @@ main(int argc, char *argv[])
     if (ierr < 0)
         printf("read dset1 failed\n");
 
-    ierr = H5Dread(r_dset_id2, H5T_NATIVE_FLOAT, memspace, filespace, dxpl_id, id2);
+    ierr = H5Dread(r_dset_id2, H5T_NATIVE_INT, memspace, filespace, dxpl_id, id2);
     if (ierr < 0)
         printf("read r_dset2 failed\n");
 
