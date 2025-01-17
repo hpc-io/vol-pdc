@@ -148,7 +148,6 @@ main(int argc, char *argv[])
     else
         numparticles = 8 * 1024 * 1024;
 
-
     nts = atoi(argv[3]);
     if (nts <= 0) {
         print_usage(argv[0]);

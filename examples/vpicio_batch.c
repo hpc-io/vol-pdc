@@ -156,7 +156,7 @@ main(int argc, char *argv[])
     int      my_rank, num_procs, nstep, i, sleeptime;
     MPI_Comm comm = MPI_COMM_WORLD;
     double   t0, t1, t2, t3, tw = 0;
-    char  grp_name[128];
+    char     grp_name[128];
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(comm, &my_rank);
