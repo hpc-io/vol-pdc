@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 herr_t ierr;
-hid_t  file_id, dset_id, fapl;
+hid_t  file_id, dset_id, grp_id, fapl;
 hid_t  filespace, memspace;
 hid_t  plist_id, dcpl_id;
 
@@ -49,25 +49,16 @@ init_particles()
 }
 
 void
-create_h5_datasets(int i)
+create_h5_datasets()
 {
-    char dname[128];
-    sprintf(dname, "step%d_x", i);
-    dsets[0] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_y", i);
-    dsets[1] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_z", i);
-    dsets[2] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_id1", i);
-    dsets[3] = H5Dcreate(file_id, dname, H5T_NATIVE_INT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_id2", i);
-    dsets[4] = H5Dcreate(file_id, dname, H5T_NATIVE_INT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_px", i);
-    dsets[5] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_py", i);
-    dsets[6] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    sprintf(dname, "step%d_pz", i);
-    dsets[7] = H5Dcreate(file_id, dname, H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[0] = H5Dcreate(grp_id, "x", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[1] = H5Dcreate(grp_id, "y", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[2] = H5Dcreate(grp_id, "z", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[3] = H5Dcreate(grp_id, "id1", H5T_NATIVE_INT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[4] = H5Dcreate(grp_id, "id2", H5T_NATIVE_INT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[5] = H5Dcreate(grp_id, "px", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[6] = H5Dcreate(grp_id, "py", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+    dsets[7] = H5Dcreate(grp_id, "pz", H5T_NATIVE_FLOAT, filespace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
 }
 
 void
@@ -165,6 +156,7 @@ main(int argc, char *argv[])
     int      my_rank, num_procs, nstep, i, sleeptime;
     MPI_Comm comm = MPI_COMM_WORLD;
     double   t0, t1, t2, t3, tw = 0;
+    char  grp_name[128];
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(comm, &my_rank);
@@ -243,9 +235,11 @@ main(int argc, char *argv[])
         printf("Created HDF5 file [%s] \n", argv[1]);
 
     for (i = 0; i < nstep; i++) {
+        sprintf(grp_name, "Timestep_%d", i);
+        grp_id = H5Gcreate(file_id, grp_name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
         filespace = H5Screate_simple(1, (hsize_t *)&total_particles, NULL);
-        create_h5_datasets(i);
+        create_h5_datasets();
 
         H5Sselect_hyperslab(filespace, H5S_SELECT_SET, (hsize_t *)&offset, NULL, (hsize_t *)&numparticles,
                             NULL);
@@ -262,6 +256,8 @@ main(int argc, char *argv[])
         tw += (t2 - t1);
 
         close_h5_datasets();
+
+        H5Gclose(grp_id);
         H5Sclose(filespace);
 
         if (my_rank == 0)

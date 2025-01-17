@@ -120,7 +120,7 @@ read_h5_data(int rank, hid_t loc, hid_t *dset_ids, hid_t filespace, hid_t memspa
 void
 print_usage(char *name)
 {
-    printf("Usage: %s /path/to/file #timestep sleep_sec [# mega particles]\n", name);
+    printf("Usage: %s /path/to/file #mega_particles #timestep sleep_sec \n", name);
 }
 
 int
@@ -133,41 +133,38 @@ main(int argc, char *argv[])
     char *file_name;
 
     MPI_Init(&argc, &argv);
-    if (argc < 3) {
-        printf("Usage: ./%s /path/to/file #timestep [# mega particles]\n", argv[0]);
-        return 0;
-    }
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-    if (argc < 4) {
+    if (argc < 3) {
         print_usage(argv[0]);
         return 0;
     }
 
     file_name = argv[1];
 
-    nts = atoi(argv[2]);
+    if (argc >= 3)
+        numparticles = (atoi(argv[2])) * 1024 * 1024;
+    else
+        numparticles = 8 * 1024 * 1024;
+
+
+    nts = atoi(argv[3]);
     if (nts <= 0) {
-        printf("Usage: ./%s /path/to/file #timestep [# mega particles]\n", argv[0]);
+        print_usage(argv[0]);
         return 0;
     }
 
-    sleep_time = atoi(argv[3]);
+    sleep_time = atoi(argv[4]);
     if (sleep_time < 0) {
         print_usage(argv[0]);
         return 0;
     }
 
-    if (argc == 5) {
-        numparticles = (atoi(argv[4])) * 1024 * 1024;
-    }
-    else {
-        numparticles = 8 * 1024 * 1024;
-    }
-
     if (my_rank == 0) {
-        printf("Number of paritcles: %ld \n", numparticles);
+        fprintf(stderr, "Number of paritcles: %ld \n", numparticles);
+        fprintf(stderr, "Number of steps: %d \n", nts);
+        fprintf(stderr, "Sleep time: %d \n", sleep_time);
     }
 
     x = (float *)malloc(numparticles * sizeof(double));
@@ -219,7 +216,6 @@ main(int argc, char *argv[])
         dset_ids[i] = (hid_t *)calloc(8, sizeof(hid_t));
 
     MPI_Barrier(MPI_COMM_WORLD);
-    timer_on(1);
 
     for (i = 0; i < nts; i++) {
 
@@ -229,29 +225,28 @@ main(int argc, char *argv[])
         if (my_rank == 0)
             printf("Read %s ... \n", grp_name);
 
+        timer_on(1);
         timer_reset(2);
         timer_on(2);
 
         read_h5_data(my_rank, grp_ids[i], dset_ids[i], filespace, memspace, dxpl);
 
         MPI_Barrier(MPI_COMM_WORLD);
+        timer_off(1);
         timer_off(2);
         if (my_rank == 0)
             timer_msg(2, "read 1 step");
 
-        if (i != 0) {
+        for (j = 0; j < 8; j++)
+            H5Dclose(dset_ids[i][j]);
+        H5Gclose(grp_ids[i]);
+
+        if (i != nts - 1) {
             if (my_rank == 0)
                 printf("  sleep for %ds\n", sleep_time);
             sleep(sleep_time);
         }
-
-        for (j = 0; j < 8; j++)
-            H5Dclose(dset_ids[i][j]);
-        H5Gclose(grp_ids[i]);
     }
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    timer_off(1);
 
     H5Sclose(memspace);
     H5Sclose(filespace);
