@@ -40,12 +40,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install libtool
-          sudo apt install cmake
+          sudo apt install cmake uuid-dev
           # hdf5
-          git clone https://github.com/HDFGroup/hdf5.git
-          # libfabric 1.12.1
-          wget https://github.com/ofiwg/libfabric/archive/refs/tags/v1.12.1.tar.gz
-          tar xf v1.12.1.tar.gz
+          wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz
+          tar xzf hdf5-1.14.6.tar.gz
+          mv hdf5-1.14.6 hdf5
+          # libfabric 1.20.1
+          wget https://github.com/ofiwg/libfabric/archive/refs/tags/v1.20.1.tar.gz
+          tar xf v1.20.1.tar.gz
           # mercury
           git clone https://github.com/mercury-hpc/mercury.git --recursive
           # mpi
@@ -66,7 +68,7 @@ jobs:
           export HDF5_LIBRARY=$mydir/hdf5/install/lib/libhdf5.so
           export VOL_DIR=$mydir/vol-pdc
           export MERCURY_DIR=$mydir/mercury/install
-          export LIBFABRIC_DIR=$mydir/libfabric-1.12.1/install
+          export LIBFABRIC_DIR=$mydir/libfabric-1.20.1/install
           export PDC_DIR=$mydir/pdc/install
           export LD_LIBRARY_PATH="$LIBFABRIC_DIR/lib:$MERCURY_DIR/lib:$PDC_DIR/lib:$VOL_DIR/install/lib:$LD_LIBRARY_PATH"
           export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MERCURY_DIR/lib:$PATH"
@@ -74,7 +76,6 @@ jobs:
           # Compile HDF5
           mkdir $HDF5_DIR
           cd hdf5
-          git checkout hdf5-1_14_1-2
           export HDF5_LIBTOOL=/usr/bin/libtoolize
           ./autogen.sh
           ./configure CC=mpicc --prefix=$HDF5_DIR --enable-parallel --disable-tests --disable-hl --disable-fortran 
@@ -92,7 +93,7 @@ jobs:
           # Compile Mercury
           mkdir $MERCURY_DIR
           cd $MERCURY_DIR
-          git checkout v2.1.0
+          git checkout v2.2.0
           cmake ../  -DCMAKE_C_COMPILER=gcc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=ON -DNA_USE_OFI=ON -DNA_USE_SM=OFF -DMERCURY_USE_CHECKSUMS=OFF
           make -j2 && sudo make install
           ctest
