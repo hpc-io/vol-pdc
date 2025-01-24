@@ -34,7 +34,7 @@ main(int argc, char *argv[])
     my_rank   = 0;
     num_procs = 1;
     // Variables and dimensions
-    long numparticles = 8388608; // 8  meg particles per process
+    long long numparticles = 8388608; // 8  meg particles per process
     /* long      numparticles = 4; */
     long long total_particles, offset;
 
@@ -58,7 +58,7 @@ main(int argc, char *argv[])
     offset -= numparticles;
     offset = 0;
     if (my_rank == 0)
-        printf("Number of paritcles: %ld \n", numparticles);
+        printf("Number of paritcles: %lld \n", numparticles);
 
     x   = (float *)malloc(numparticles * sizeof(float));
     y   = (float *)malloc(numparticles * sizeof(float));

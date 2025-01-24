@@ -23,7 +23,6 @@ main(int argc, char *argv[])
     hid_t    r_dset_id1, r_dset_id2, r_dset_id3, r_dset_id4, r_dset_id5, r_dset_id6, r_dset_id7, r_dset_id8;
     hid_t    filespace, memspace;
     hid_t    attr1;
-    hid_t    aid1;
     herr_t   ierr;
     int      point_out; /* Buffer to read scalar attribute back */
     int      point = 1;
@@ -41,10 +40,6 @@ main(int argc, char *argv[])
     float *x, *y, *z;
     float *px, *py, *pz;
     int *  id1, *id2;
-    int    x_dim = 64;
-    int    y_dim = 64;
-    int    z_dim = 64;
-    int    i, j;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_dup(MPI_COMM_WORLD, &comm);

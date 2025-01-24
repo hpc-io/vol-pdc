@@ -224,7 +224,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
 #-----------------------------------------------------------------------------
 # Examples
 #-----------------------------------------------------------------------------
-option(BUILD_EXAMPLES "Build examples." OFF)
+option(BUILD_EXAMPLES "Build examples." ON)
 if(BUILD_EXAMPLES)
   # BuildExamples.cmake builds the examples as a separate project. This ensures
   # that examples can be built by themselves as well as avoiding pollution of
@@ -233,13 +233,15 @@ if(BUILD_EXAMPLES)
   set(examples
     vpicio
     vpicio_open
+    vpicio_batch
+    bdcatsio_batch
   )
 
   foreach (example ${examples})
-    add_executable (h5pdc_${example}
-      ${CMAKE_CURRENT_SOURCE_DIR}/examples/h5pdc_${example}.c
+    add_executable (${example}
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/${example}.c
     )
-    target_link_libraries(h5pdc_${example} hdf5_vol_pdc)
+    target_link_libraries(${example} hdf5_vol_pdc)
   endforeach()
 endif()
 
@@ -300,8 +302,10 @@ install(
 
 install(
   FILES
-    ${HDF5_VOL_PDC_BINARY_DIR}/bin/h5pdc_vpicio
-    ${HDF5_VOL_PDC_BINARY_DIR}/bin/h5pdc_vpicio_open
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/vpicio
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/vpicio_batch
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/vpicio_open
+    ${HDF5_VOL_PDC_BINARY_DIR}/bin/bdcatsio_batch
   DESTINATION
     ${CMAKE_INSTALL_PREFIX}/bin
 )
