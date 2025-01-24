@@ -263,11 +263,16 @@ static const H5VL_class_t H5VL_pdc_g = {
     },
     {
         /* wrap_cls */
-        H5VL_pdc_get_object,    /* get_object   */
-        H5VL_pdc_get_wrap_ctx,  /* get_wrap_ctx */
-        H5VL_pdc_wrap_object,   /* wrap_object  */
-        H5VL_pdc_unwrap_object, /* unwrap_object */
-        H5VL_pdc_free_wrap_ctx  /* free_wrap_ctx */
+	NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        /* H5VL_pdc_get_object,    /1* get_object   *1/ */
+        /* H5VL_pdc_get_wrap_ctx,  /1* get_wrap_ctx *1/ */
+        /* H5VL_pdc_wrap_object,   /1* wrap_object  *1/ */
+        /* H5VL_pdc_unwrap_object, /1* unwrap_object *1/ */
+        /* H5VL_pdc_free_wrap_ctx  /1* free_wrap_ctx *1/ */
     },
     {
         /* attribute_cls */
@@ -491,17 +496,17 @@ H5VL_pdc_new_obj(void *under_obj, hid_t under_vol_id)
 } /* end H5VL__pdc_new_obj() */
 
 /*---------------------------------------------------------------------------*/
-/* static herr_t */
-/* H5VL_pdc_free_obj(H5VL_pdc_obj_t *obj) */
-/* { */
-/*     hid_t err_id; */
+static herr_t
+H5VL_pdc_free_obj(H5VL_pdc_obj_t *obj)
+{
+    hid_t err_id;
 
-/*     err_id = H5Eget_current_stack(); */
-/*     H5Eset_current_stack(err_id); */
-/*     free(obj); */
+    err_id = H5Eget_current_stack();
+    H5Eset_current_stack(err_id);
+    free(obj);
 
-/*     return 0; */
-/* } /1* end H5VL__pdc_free_obj() *1/ */
+    return 0;
+} /* end H5VL__pdc_free_obj() */
 
 /*---------------------------------------------------------------------------*/
 static void *
@@ -659,38 +664,105 @@ H5VL_pdc_str_to_info(const char *str, void **_info)
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_get_object(const void *obj __attribute__((unused)))
+H5VL_pdc_get_object(const void *obj)
 {
-    return (void *)-1;
+    const H5VL_pdc_obj_t *o = (const H5VL_pdc_obj_t *)obj;
+    return H5VLget_object(o->under_object, o->under_vol_id);
 } /* end H5VL_pdc_get_object() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_get_wrap_ctx(const void *obj __attribute__((unused)), void **wrap_ctx __attribute__((unused)))
+H5VL_pdc_get_wrap_ctx(const void *obj, void **wrap_ctx)
 {
-    return -1;
+    const H5VL_pdc_obj_t *o_pdc = (const H5VL_pdc_obj_t *)obj;
+    hid_t under_vol_id = 0;
+    void *under_object = NULL;
+    H5VL_pdc_wrap_ctx_t *new_wrap_ctx;
+
+    /* Allocate new VOL object wrapping context for the pdc connector */
+    new_wrap_ctx = (H5VL_pdc_wrap_ctx_t *)calloc(1, sizeof(H5VL_pdc_wrap_ctx_t));
+    if (new_wrap_ctx == NULL) {
+        fprintf(stderr, "  [PDC VOL ERROR] with allocation in %s\n", __func__);
+        return -1;
+    }
+
+    if (o_pdc->under_vol_id > 0) {
+        under_vol_id = o_pdc->under_vol_id;
+    }
+
+    /* Increment reference count on underlying VOL ID, and copy the VOL info */
+    new_wrap_ctx->under_vol_id = under_vol_id;
+    H5Iinc_ref(new_wrap_ctx->under_vol_id);
+
+    under_object = o_pdc->under_object;
+    if (under_object) {
+        H5VLget_wrap_ctx(under_object, under_vol_id, &new_wrap_ctx->under_wrap_ctx);
+    }
+
+    /* Set wrap context to return */
+    *wrap_ctx = new_wrap_ctx;
+
+    return 0;
 } /* end H5VL_pdc_get_wrap_ctx() */
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_wrap_object(void *obj __attribute__((unused)), H5I_type_t obj_type __attribute__((unused)),
-                     void *_wrap_ctx __attribute__((unused)))
+H5VL_pdc_wrap_object(void *obj, H5I_type_t obj_type, void *_wrap_ctx)
 {
-    return (void *)-1;
+    H5VL_pdc_wrap_ctx_t *wrap_ctx = (H5VL_pdc_wrap_ctx_t *)_wrap_ctx;
+    H5VL_pdc_obj_t *new_obj;
+    void *under;
+
+    /* Wrap the object with the underlying VOL */
+    under = H5VLwrap_object(obj, obj_type, wrap_ctx->under_vol_id, wrap_ctx->under_wrap_ctx);
+    if (under) {
+        if ((new_obj = H5VL_pdc_new_obj(under, wrap_ctx->under_vol_id)) == NULL) {
+            fprintf(stderr, "  [PDC VOL ERROR] %s with request object calloc\n", __func__);
+            return NULL;
+        }
+    }
+    else
+        new_obj = NULL;
+
+    return new_obj;
 } /* end H5VL_pdc_wrap_object() */
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_unwrap_object(void *obj __attribute__((unused)))
+H5VL_pdc_unwrap_object(void *obj)
 {
-    return (void *)-1;
+    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
+    void *        under;
+
+    /* Unrap the object with the underlying VOL */
+    under = H5VLunwrap_object(o->under_object, o->under_vol_id);
+
+    if (under)
+        H5VL_pdc_free_obj(o);
+
+    return under;
 } /* end H5VL_pdc_unwrap_object() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_free_wrap_ctx(void *_wrap_ctx __attribute__((unused)))
+H5VL_pdc_free_wrap_ctx(void *_wrap_ctx)
 {
-    return -1;
+    H5VL_pdc_wrap_ctx_t *wrap_ctx = (H5VL_pdc_wrap_ctx_t *)_wrap_ctx;
+    hid_t                  err_id;
+
+    err_id = H5Eget_current_stack();
+
+    /* Release underlying VOL ID and wrap context */
+    if (wrap_ctx->under_wrap_ctx)
+        H5VLfree_wrap_ctx(wrap_ctx->under_wrap_ctx, wrap_ctx->under_vol_id);
+    H5Idec_ref(wrap_ctx->under_vol_id);
+
+    H5Eset_current_stack(err_id);
+
+    /* Free pdc wrap context object itself */
+    free(wrap_ctx);
+
+    return 0;
 } /* end H5VL_pdc_free_wrap_ctx() */
 
 /*---------------------------------------------------------------------------*/
