@@ -263,11 +263,7 @@ static const H5VL_class_t H5VL_pdc_g = {
     },
     {
         /* wrap_cls */
-	NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
+        NULL, NULL, NULL, NULL, NULL,
         /* H5VL_pdc_get_object,    /1* get_object   *1/ */
         /* H5VL_pdc_get_wrap_ctx,  /1* get_wrap_ctx *1/ */
         /* H5VL_pdc_wrap_object,   /1* wrap_object  *1/ */
@@ -674,10 +670,10 @@ H5VL_pdc_get_object(const void *obj)
 static herr_t
 H5VL_pdc_get_wrap_ctx(const void *obj, void **wrap_ctx)
 {
-    const H5VL_pdc_obj_t *o_pdc = (const H5VL_pdc_obj_t *)obj;
-    hid_t under_vol_id = 0;
-    void *under_object = NULL;
-    H5VL_pdc_wrap_ctx_t *new_wrap_ctx;
+    const H5VL_pdc_obj_t *o_pdc        = (const H5VL_pdc_obj_t *)obj;
+    hid_t                 under_vol_id = 0;
+    void *                under_object = NULL;
+    H5VL_pdc_wrap_ctx_t * new_wrap_ctx;
 
     /* Allocate new VOL object wrapping context for the pdc connector */
     new_wrap_ctx = (H5VL_pdc_wrap_ctx_t *)calloc(1, sizeof(H5VL_pdc_wrap_ctx_t));
@@ -710,8 +706,8 @@ static void *
 H5VL_pdc_wrap_object(void *obj, H5I_type_t obj_type, void *_wrap_ctx)
 {
     H5VL_pdc_wrap_ctx_t *wrap_ctx = (H5VL_pdc_wrap_ctx_t *)_wrap_ctx;
-    H5VL_pdc_obj_t *new_obj;
-    void *under;
+    H5VL_pdc_obj_t *     new_obj;
+    void *               under;
 
     /* Wrap the object with the underlying VOL */
     under = H5VLwrap_object(obj, obj_type, wrap_ctx->under_vol_id, wrap_ctx->under_wrap_ctx);
@@ -732,7 +728,7 @@ static void *
 H5VL_pdc_unwrap_object(void *obj)
 {
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    void *        under;
+    void *          under;
 
     /* Unrap the object with the underlying VOL */
     under = H5VLunwrap_object(o->under_object, o->under_vol_id);
@@ -748,7 +744,7 @@ static herr_t
 H5VL_pdc_free_wrap_ctx(void *_wrap_ctx)
 {
     H5VL_pdc_wrap_ctx_t *wrap_ctx = (H5VL_pdc_wrap_ctx_t *)_wrap_ctx;
-    hid_t                  err_id;
+    hid_t                err_id;
 
     err_id = H5Eget_current_stack();
 
