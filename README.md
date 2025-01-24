@@ -2,7 +2,7 @@
 
 ## Install PDC and its dependent libraries
 
-Please follow the instructions in the [PDC documentation website](https://pdc.readthedocs.io/en/latest/getting_started.html#installing-pdc-from-source-code) to install libfabric, mercury, and PDC. We recommend using the PDC develop branch.
+Please follow the instructions in the [PDC documentation website](https://pdc.readthedocs.io/en/latest/getting_started.html#installing-pdc-from-source-code) to install libfabric, mercury, and PDC. We recommend using the PDC stable branch.
 
 
 ## Environmental variables
@@ -21,10 +21,8 @@ export PATH="$LIBFABRIC_DIR/include:$LIBFABRIC_DIR/lib:$MERCURY_DIR/include:$MER
 ```
 git clone https://github.com/HDFGroup/hdf5.git
 cd hdf5
-git checkout hdf5-1_14_1-2
-export HDF5_LIBTOOL=/usr/bin/libtoolize
-./autogen.sh
-./configure CC=mpicc --prefix=$HDF5_DIR --enable-parallel --disable-tests --disable-hl --disable-fortran 
+git checkout hdf5_1_14_5
+cmake -DCMAKE_INSTALL_PREFIX=$HDF5_DIR -DHDF5_ENABLE_PARALLEL=ON ../ 
 make && make install
 ```
 
