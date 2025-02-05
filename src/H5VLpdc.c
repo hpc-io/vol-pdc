@@ -951,7 +951,7 @@ H5VL_pdc_file_create(const char *name, unsigned flags, hid_t fcpl_id __attribute
 
     if ((cont_prop = PDCprop_create(PDC_CONT_CREATE, pdc_id)) <= 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCREATE, NULL, "can't create container property");
-    if ((file->cont_id = PDCcont_create_col(name, cont_prop)) <= 0)
+    if ((file->cont_id = PDCcont_create(name, cont_prop)) <= 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCREATE, NULL, "can't create container");
 
     if ((PDCprop_close(cont_prop)) < 0)
@@ -1200,14 +1200,15 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
                         hid_t dcpl_id __attribute__((unused)), hid_t dapl_id __attribute__((unused)),
                         hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-#ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_create\n");
-    fflush(stdout);
-#endif
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int             buff_len;
 
     FUNC_ENTER_VOL(void *, NULL)
+
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "\nentered dataset_create [%s][%s][%s]\n", o->file_name, o->group_name, name);
+    fflush(stdout);
+#endif
 
     if (o->group_name) {
         buff_len = strlen(name) + strlen(o->file_name) + strlen(o->group_name) + 3;
@@ -1284,7 +1285,10 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get dimensions");
     PDCprop_set_obj_dims(obj_prop, ndim, dims);
     /* Create PDC object */
-    obj_id         = PDCobj_create_mpi(o->cont_id, new_name, obj_prop, 0, o->comm);
+    if (o->comm != MPI_COMM_NULL)
+        obj_id = PDCobj_create_mpi(o->cont_id, new_name, obj_prop, 0, o->comm);
+    else
+        obj_id = PDCobj_create(o->cont_id, new_name, obj_prop);
     dset->obj_id   = obj_id;
     dset->h5i_type = H5I_DATASET;
     strcpy(dset->obj_name, name);
@@ -1355,7 +1359,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
         HGOTO_ERROR(H5E_DATASET, H5E_CANTINIT, NULL, "can't init PDC dataset struct");
 
     strcpy(dset->obj_name, name);
-    dset->obj_id = PDCobj_open_col(name, pdc_id);
+    dset->obj_id = PDCobj_open(name, pdc_id);
     if (dset->obj_id <= 0) {
         free(dset);
         return NULL;
