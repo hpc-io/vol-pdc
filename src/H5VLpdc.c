@@ -378,8 +378,8 @@ static hbool_t H5VL_pdc_init_g = FALSE;
 hid_t H5VL_ERR_STACK_g = H5I_INVALID_HID;
 hid_t H5VL_ERR_CLS_g   = H5I_INVALID_HID;
 
-static pdcid_t pdc_id_g = 0;
-static int my_rank_g = 0;
+static pdcid_t pdc_id_g  = 0;
+static int     my_rank_g = 0;
 
 /*---------------------------------------------------------------------------*/
 
@@ -807,7 +807,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags __attribute__((unused)),
     MPI_Comm_rank(file->comm, &file->my_rank);
     MPI_Comm_size(file->comm, &file->num_procs);
 
-    my_rank_g = file->my_rank;
+    my_rank_g  = file->my_rank;
     file->nobj = 0;
 
     H5_LIST_INIT(&file->ids);
@@ -1196,9 +1196,8 @@ H5VL_pdc_file_optional(void *file __attribute__((unused)), H5VL_optional_args_t 
 /*---------------------------------------------------------------------------*/
 static void *
 H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const char *name,
-                        hid_t lcpl_id __attribute__((unused)), hid_t type_id, hid_t space_id,
-                        hid_t dcpl_id, hid_t dapl_id, hid_t dxpl_id,
-                        void **req __attribute__((unused)))
+                        hid_t lcpl_id __attribute__((unused)), hid_t type_id, hid_t space_id, hid_t dcpl_id,
+                        hid_t dapl_id, hid_t dxpl_id, void **req __attribute__((unused)))
 {
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int             buff_len;
@@ -1206,8 +1205,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     FUNC_ENTER_VOL(void *, NULL)
 
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "Rank %d: entered dataset_create [%s][%s][%s]\n", 
-            o->my_rank, o->file_name, o->group_name, name);
+    fprintf(stderr, "Rank %d: entered dataset_create [%s][%s][%s]\n", o->my_rank, o->file_name, o->group_name,
+            name);
 #endif
 
     if (o->group_name) {
@@ -1265,8 +1264,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     switch (H5Tget_class(type_id)) {
         case H5T_INTEGER:
             /* printf("Datatype class: Integer\n"); */
-	    PDCprop_set_obj_type(obj_prop, PDC_INT);
-	    dset->type = PDC_INT;
+            PDCprop_set_obj_type(obj_prop, PDC_INT);
+            dset->type = PDC_INT;
             break;
         case H5T_FLOAT:
             /* printf("Datatype class: Float\n"); */
@@ -1292,8 +1291,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
             break;
         case H5T_ENUM:
             /* printf("Datatype class: Enum\n"); */
-	    PDCprop_set_obj_type(obj_prop, PDC_INT);
-	    dset->type = PDC_INT;
+            PDCprop_set_obj_type(obj_prop, PDC_INT);
+            dset->type = PDC_INT;
             break;
         case H5T_REFERENCE:
             printf("Datatype class: Reference is not supported in PDC\n");
@@ -1658,7 +1657,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_dataset_specific(void *obj __attribute__((unused)),
+H5VL_pdc_dataset_specific(void *                        obj __attribute__((unused)),
                           H5VL_dataset_specific_args_t *args __attribute__((unused)),
                           hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
@@ -1667,7 +1666,7 @@ H5VL_pdc_dataset_specific(void *obj __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_dataset_optional(void *obj __attribute__((unused)),
+H5VL_pdc_dataset_optional(void *                obj __attribute__((unused)),
                           H5VL_optional_args_t *args __attribute__((unused)),
                           hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
@@ -1711,7 +1710,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_datatype_commit(void *obj __attribute__((unused)),
+H5VL_pdc_datatype_commit(void *                   obj __attribute__((unused)),
                          const H5VL_loc_params_t *loc_params __attribute__((unused)),
                          const char *name __attribute__((unused)), hid_t type_id __attribute__((unused)),
                          hid_t lcpl_id __attribute__((unused)), hid_t tcpl_id __attribute__((unused)),
@@ -1723,7 +1722,7 @@ H5VL_pdc_datatype_commit(void *obj __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_datatype_open(void *obj __attribute__((unused)),
+H5VL_pdc_datatype_open(void *                   obj __attribute__((unused)),
                        const H5VL_loc_params_t *loc_params __attribute__((unused)),
                        const char *name __attribute__((unused)), hid_t tapl_id __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
@@ -1733,7 +1732,7 @@ H5VL_pdc_datatype_open(void *obj __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_get(void *dt __attribute__((unused)),
+H5VL_pdc_datatype_get(void *                    dt __attribute__((unused)),
                       H5VL_datatype_get_args_t *args __attribute__((unused)),
                       hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
@@ -1742,7 +1741,7 @@ H5VL_pdc_datatype_get(void *dt __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_specific(void *obj __attribute__((unused)),
+H5VL_pdc_datatype_specific(void *                         obj __attribute__((unused)),
                            H5VL_datatype_specific_args_t *args __attribute__((unused)),
                            hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
@@ -1751,7 +1750,7 @@ H5VL_pdc_datatype_specific(void *obj __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_optional(void *obj __attribute__((unused)),
+H5VL_pdc_datatype_optional(void *                obj __attribute__((unused)),
                            H5VL_optional_args_t *args __attribute__((unused)),
                            hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
