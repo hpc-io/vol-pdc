@@ -82,6 +82,9 @@ typedef struct H5VL_pdc_obj_t {
     int      nobj;
     H5_LIST_HEAD(H5VL_pdc_obj_t) ids;
     /* Dataset object elements */
+    hid_t   dcpl_id;
+    hid_t   dapl_id;
+    hid_t   dxpl_id;
     hid_t   type_id;
     hid_t   space_id;
     hbool_t mapped;
@@ -375,7 +378,8 @@ static hbool_t H5VL_pdc_init_g = FALSE;
 hid_t H5VL_ERR_STACK_g = H5I_INVALID_HID;
 hid_t H5VL_ERR_CLS_g   = H5I_INVALID_HID;
 
-static pdcid_t pdc_id = 0;
+static pdcid_t pdc_id_g = 0;
+static int my_rank_g = 0;
 
 /*---------------------------------------------------------------------------*/
 
@@ -429,8 +433,7 @@ static herr_t
 H5VL_pdc_init(hid_t H5VL_ATTR_UNUSED vipl_id)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered pdc_init\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -448,12 +451,13 @@ H5VL_pdc_init(hid_t H5VL_ATTR_UNUSED vipl_id)
         HGOTO_ERROR(H5E_VOL, H5E_CANTREGISTER, FAIL, "can't register error class");
 
     /* Init PDC */
-    pdc_id = PDCinit("pdc");
-    if (pdc_id <= 0)
-        HGOTO_ERROR(H5E_VOL, H5E_CANTINIT, FAIL, "could not initialize PDC");
-
-    /* Initialized */
-    H5VL_pdc_init_g = TRUE;
+    if (pdc_id_g == 0) {
+        pdc_id_g = PDCinit("pdc");
+        if (pdc_id_g <= 0)
+            HGOTO_ERROR(H5E_VOL, H5E_CANTINIT, FAIL, "could not initialize PDC");
+        /* Initialized */
+        H5VL_pdc_init_g = TRUE;
+    }
 
 done:
     FUNC_LEAVE_VOL
@@ -467,6 +471,10 @@ H5VL_pdc_obj_term(void)
 
     if (!H5VL_pdc_init_g)
         HGOTO_DONE(SUCCEED);
+
+    if (pdc_id_g > 0 && PDCclose(pdc_id_g) < 0)
+        HGOTO_ERROR(H5E_FILE, H5E_CANTCLOSEFILE, FAIL, "failed to close PDC");
+    pdc_id_g = 0;
 
     /* "Forget" plugin id.  This should normally be called by the library
      * when it is closing the id, so no need to close it here. */
@@ -487,6 +495,7 @@ H5VL_pdc_new_obj(void *under_obj, hid_t under_vol_id)
     new_obj               = (H5VL_pdc_obj_t *)calloc(1, sizeof(H5VL_pdc_obj_t));
     new_obj->under_object = under_obj;
     new_obj->under_vol_id = under_vol_id;
+    H5Iinc_ref(new_obj->under_vol_id);
 
     return new_obj;
 } /* end H5VL__pdc_new_obj() */
@@ -509,8 +518,7 @@ static void *
 H5VL_pdc_info_copy(const void *_old_info)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered info_copy\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     const H5VL_pdc_info_t *old_info = (const H5VL_pdc_info_t *)_old_info;
     H5VL_pdc_info_t *      new_info = NULL;
@@ -540,8 +548,7 @@ static herr_t
 H5VL_pdc_info_cmp(int *cmp_value, const void *_info1, const void *_info2)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered info_cmp\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     const H5VL_pdc_info_t *info1 = (const H5VL_pdc_info_t *)_info1;
@@ -562,8 +569,7 @@ static herr_t
 H5VL_pdc_info_free(void *_info)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered info_free\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_info_t *info = (H5VL_pdc_info_t *)_info;
@@ -767,8 +773,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags __attribute__((unused)),
                     H5VL_pdc_info_t *info __attribute__((unused)), hid_t fapl_id)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_init\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *file = NULL;
@@ -802,6 +807,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags __attribute__((unused)),
     MPI_Comm_rank(file->comm, &file->my_rank);
     MPI_Comm_size(file->comm, &file->num_procs);
 
+    my_rank_g = file->my_rank;
     file->nobj = 0;
 
     H5_LIST_INIT(&file->ids);
@@ -817,8 +823,7 @@ static herr_t
 H5VL__pdc_file_close(H5VL_pdc_obj_t *file)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_close\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
@@ -843,8 +848,7 @@ static H5VL_pdc_obj_t *
 H5VL__pdc_dset_init(H5VL_pdc_obj_t *item __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dset_init\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *dset = NULL;
@@ -875,14 +879,18 @@ static herr_t
 H5VL__pdc_dset_free(H5VL_pdc_obj_t *dset)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dset_free\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    if (dset->space_id != FAIL && H5Idec_ref(dset->space_id) < 0)
-        HDONE_ERROR(H5E_DATASET, H5E_CANTDEC, FAIL, "failed to close space");
+    /* if (dset->space_id != FAIL && H5Idec_ref(dset->space_id) < 0) */
+    /*     HDONE_ERROR(H5E_DATASET, H5E_CANTDEC, FAIL, "failed to close space"); */
+    H5Pclose(dset->dcpl_id);
+    H5Pclose(dset->dapl_id);
+    H5Pclose(dset->dxpl_id);
+    H5Tclose(dset->type_id);
+    H5Sclose(dset->space_id);
 
     H5_LIST_REMOVE(dset, entry);
     free(dset);
@@ -929,8 +937,7 @@ H5VL_pdc_file_create(const char *name, unsigned flags, hid_t fcpl_id __attribute
                      hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_create\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s, fname [%s]\n", my_rank_g, __func__, name);
 #endif
 
     H5VL_pdc_info_t *info;
@@ -949,8 +956,9 @@ H5VL_pdc_file_create(const char *name, unsigned flags, hid_t fcpl_id __attribute
     if (NULL == (file = H5VL__pdc_file_init(name, flags, info, fapl_id)))
         HGOTO_ERROR(H5E_FILE, H5E_CANTINIT, NULL, "can't init PDC file struct");
 
-    if ((cont_prop = PDCprop_create(PDC_CONT_CREATE, pdc_id)) <= 0)
+    if ((cont_prop = PDCprop_create(PDC_CONT_CREATE, pdc_id_g)) <= 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCREATE, NULL, "can't create container property");
+
     if ((file->cont_id = PDCcont_create(name, cont_prop)) <= 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCREATE, NULL, "can't create container");
 
@@ -984,8 +992,7 @@ H5VL_pdc_file_open(const char *name, unsigned flags, hid_t fapl_id, hid_t dxpl_i
                    void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_open\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_info_t *info;
@@ -1001,7 +1008,7 @@ H5VL_pdc_file_open(const char *name, unsigned flags, hid_t fapl_id, hid_t dxpl_i
     if (NULL == (file = H5VL__pdc_file_init(name, flags, info, fapl_id)))
         HGOTO_ERROR(H5E_FILE, H5E_CANTINIT, NULL, "can't init PDC file struct");
 
-    if ((file->cont_id = PDCcont_open(name, pdc_id)) <= 0)
+    if ((file->cont_id = PDCcont_open(name, pdc_id_g)) <= 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTOPENFILE, NULL, "failed to create container");
 
     /* Free info */
@@ -1028,8 +1035,7 @@ herr_t
 H5VL_pdc_file_close(void *_file, hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_close\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *file = (H5VL_pdc_obj_t *)_file;
     H5VL_pdc_obj_t *dset = NULL;
@@ -1039,18 +1045,15 @@ H5VL_pdc_file_close(void *_file, hid_t dxpl_id __attribute__((unused)), void **r
 
     assert(file);
 
-    while (!H5_LIST_IS_EMPTY(&file->ids)) {
-        H5_LIST_GET_FIRST(dset, &file->ids);
-        H5_LIST_REMOVE(dset, entry);
-        if (H5VL__pdc_dset_free(dset) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_CANTFREE, FAIL, "failed to free dataset");
-    }
+    /* while (!H5_LIST_IS_EMPTY(&file->ids)) { */
+    /*     H5_LIST_GET_FIRST(dset, &file->ids); */
+    /*     H5_LIST_REMOVE(dset, entry); */
+    /*     if (H5VL__pdc_dset_free(dset) < 0) */
+    /*         HGOTO_ERROR(H5E_DATASET, H5E_CANTFREE, FAIL, "failed to free dataset"); */
+    /* } */
 
     if ((ret = PDCcont_close(file->cont_id)) < 0)
         HGOTO_ERROR(H5E_FILE, H5E_CANTCLOSEFILE, FAIL, "failed to close container");
-
-    if ((ret = PDCclose(pdc_id)) < 0)
-        HGOTO_ERROR(H5E_FILE, H5E_CANTCLOSEFILE, FAIL, "failed to close PDC");
 
     /* Close the file */
     if (H5VL__pdc_file_close(file) < 0)
@@ -1065,8 +1068,7 @@ static herr_t
 H5VL_pdc_file_specific(void *file, H5VL_file_specific_args_t *args, hid_t dxpl_id, void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_specific\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *           o = (H5VL_pdc_obj_t *)file;
     H5VL_pdc_obj_t *           new_o;
@@ -1175,10 +1177,9 @@ H5VL_pdc_file_get(void *file __attribute__((unused)), H5VL_file_get_args_t *args
                   hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_get\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
-    return -1;
+    return 0;
 } /* end H5VL_pdc_file_get() */
 
 /*---------------------------------------------------------------------------*/
@@ -1187,18 +1188,17 @@ H5VL_pdc_file_optional(void *file __attribute__((unused)), H5VL_optional_args_t 
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered file_optional\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
-    return -1;
+    return 0;
 } /* end H5VL_pdc_file_optional() */
 
 /*---------------------------------------------------------------------------*/
 static void *
 H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const char *name,
                         hid_t lcpl_id __attribute__((unused)), hid_t type_id, hid_t space_id,
-                        hid_t dcpl_id __attribute__((unused)), hid_t dapl_id __attribute__((unused)),
-                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
+                        hid_t dcpl_id, hid_t dapl_id, hid_t dxpl_id,
+                        void **req __attribute__((unused)))
 {
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
     int             buff_len;
@@ -1206,8 +1206,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     FUNC_ENTER_VOL(void *, NULL)
 
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_create [%s][%s][%s]\n", o->file_name, o->group_name, name);
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entered dataset_create [%s][%s][%s]\n", 
+            o->my_rank, o->file_name, o->group_name, name);
 #endif
 
     if (o->group_name) {
@@ -1256,39 +1256,82 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_SYM, H5E_CANTCOPY, NULL, "failed to copy dataspace");
     if (H5Sselect_all(dset->space_id) < 0)
         HGOTO_ERROR(H5E_DATASPACE, H5E_CANTDELETE, NULL, "can't change selection");
+    dset->dcpl_id = H5Pcopy(dcpl_id);
+    dset->dapl_id = H5Pcopy(dapl_id);
+    dset->dxpl_id = H5Pcopy(dxpl_id);
 
-    obj_prop = PDCprop_create(PDC_OBJ_CREATE, pdc_id);
-    if (H5Tequal(H5T_NATIVE_INT, type_id) == TRUE) {
-        PDCprop_set_obj_type(obj_prop, PDC_INT);
-        dset->type = PDC_INT;
+    obj_prop = PDCprop_create(PDC_OBJ_CREATE, pdc_id_g);
+
+    switch (H5Tget_class(type_id)) {
+        case H5T_INTEGER:
+            /* printf("Datatype class: Integer\n"); */
+	    PDCprop_set_obj_type(obj_prop, PDC_INT);
+	    dset->type = PDC_INT;
+            break;
+        case H5T_FLOAT:
+            /* printf("Datatype class: Float\n"); */
+            if (H5Tequal(H5T_NATIVE_DOUBLE, type_id) == TRUE) {
+                PDCprop_set_obj_type(obj_prop, PDC_DOUBLE);
+                dset->type = PDC_DOUBLE;
+            }
+            else {
+                PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
+                dset->type = PDC_FLOAT;
+            }
+            break;
+        case H5T_STRING:
+            /* printf("Datatype class: String\n"); */
+            PDCprop_set_obj_type(obj_prop, PDC_CHAR);
+            dset->type = PDC_CHAR;
+            break;
+        case H5T_COMPOUND:
+            printf("Datatype class: Compound is not supported in PDC\n");
+            break;
+        case H5T_ARRAY:
+            printf("Datatype class: Array is not supported in PDC\n");
+            break;
+        case H5T_ENUM:
+            /* printf("Datatype class: Enum\n"); */
+	    PDCprop_set_obj_type(obj_prop, PDC_INT);
+	    dset->type = PDC_INT;
+            break;
+        case H5T_REFERENCE:
+            printf("Datatype class: Reference is not supported in PDC\n");
+            break;
+        case H5T_OPAQUE:
+            printf("Datatype class: Opaque is not supported in PDC\n");
+            break;
+        case H5T_NO_CLASS:
+        default:
+            printf("Unknown or no datatype class\n");
+            break;
     }
-    else if (H5Tequal(H5T_NATIVE_FLOAT, type_id) == TRUE) {
-        PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
-        dset->type = PDC_FLOAT;
-    }
-    else if (H5Tequal(H5T_NATIVE_DOUBLE, type_id) == TRUE) {
-        PDCprop_set_obj_type(obj_prop, PDC_DOUBLE);
-        dset->type = PDC_DOUBLE;
-    }
-    else if (H5Tequal(H5T_NATIVE_CHAR, type_id) == TRUE) {
-        PDCprop_set_obj_type(obj_prop, PDC_CHAR);
-        dset->type = PDC_CHAR;
-    }
-    else {
-        dset->type = PDC_UNKNOWN;
-        HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, NULL, "datatype is not supported yet");
-    }
+
     /* Get dataspace extent */
     if ((ndim = H5Sget_simple_extent_ndims(space_id)) < 0)
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get number of dimensions");
     if (ndim != H5Sget_simple_extent_dims(space_id, dims, NULL))
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get dimensions");
     PDCprop_set_obj_dims(obj_prop, ndim, dims);
+
     /* Create PDC object */
-    if (o->comm != MPI_COMM_NULL)
+    if (o->comm != MPI_COMM_NULL) {
+#ifdef ENABLE_LOGGING
+        fprintf(stderr, "Rank %d: PDC obj create mpi [%s]\n", o->my_rank, new_name);
+#endif
         obj_id = PDCobj_create_mpi(o->cont_id, new_name, obj_prop, 0, o->comm);
-    else
+    }
+    else {
+#ifdef ENABLE_LOGGING
+        fprintf(stderr, "Rank %d: PDC obj create [%s]\n", o->my_rank, new_name);
+#endif
         obj_id = PDCobj_create(o->cont_id, new_name, obj_prop);
+    }
+
+#ifdef ENABLE_LOGGING
+    fprintf(stderr, "Rank %d: PDC obj id %lu\n", o->my_rank, obj_id);
+#endif
+
     dset->obj_id   = obj_id;
     dset->h5i_type = H5I_DATASET;
     strcpy(dset->obj_name, name);
@@ -1312,8 +1355,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
                       void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_open\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     FUNC_ENTER_VOL(void *, NULL)
@@ -1359,7 +1401,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
         HGOTO_ERROR(H5E_DATASET, H5E_CANTINIT, NULL, "can't init PDC dataset struct");
 
     strcpy(dset->obj_name, name);
-    dset->obj_id = PDCobj_open(name, pdc_id);
+    dset->obj_id = PDCobj_open(name, pdc_id_g);
     if (dset->obj_id <= 0) {
         free(dset);
         return NULL;
@@ -1387,8 +1429,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
                        void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_write\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *dset;
@@ -1496,8 +1537,7 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
                       void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_read\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *dset;
@@ -1581,8 +1621,7 @@ H5VL_pdc_dataset_get(void *_dset, H5VL_dataset_get_args_t *args, hid_t dxpl_id _
                      void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_get\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
@@ -1593,37 +1632,21 @@ H5VL_pdc_dataset_get(void *_dset, H5VL_dataset_get_args_t *args, hid_t dxpl_id _
 
     switch (get_type) {
         case H5VL_DATASET_GET_DCPL: {
-            hid_t dcpl_id = (*args).args.get_dcpl.dcpl_id;
-
-            /* Retrieve the dataset's creation property list */
-            if (dcpl_id < 0)
-                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dset creation property list");
-
+            args->args.get_dcpl.dcpl_id = H5Pcopy(dset->dcpl_id);
             break;
-        } /* end block */
+        }
         case H5VL_DATASET_GET_DAPL: {
-            hid_t dapl_id = (*args).args.get_dapl.dapl_id;
-
-            /* Retrieve the dataset's access property list */
-            if (dapl_id < 0)
-                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dset access property list");
-
+            args->args.get_dapl.dapl_id = H5Pcopy(dset->dapl_id);
             break;
-        } /* end block */
+        }
         case H5VL_DATASET_GET_SPACE: {
-            (*args).args.get_space.space_id = H5Scopy(dset->space_id);
-
-            /* Retrieve the dataset's dataspace */
+            args->args.get_space.space_id = H5Scopy(dset->space_id);
             break;
-        } /* end block */
+        }
         case H5VL_DATASET_GET_TYPE: {
-            hid_t ret_id = (*args).args.get_type.type_id;
-
-            /* Retrieve the dataset's datatype */
-            if (ret_id < 0)
-                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get datatype ID of dataset");
+            args->args.get_type.type_id = H5Tcopy(dset->type_id);
             break;
-        } /* end block */
+        }
         case H5VL_DATASET_GET_STORAGE_SIZE:
         default:
             HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "can't get this type of information from dataset");
@@ -1635,7 +1658,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_dataset_specific(void *                        obj __attribute__((unused)),
+H5VL_pdc_dataset_specific(void *obj __attribute__((unused)),
                           H5VL_dataset_specific_args_t *args __attribute__((unused)),
                           hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
@@ -1644,11 +1667,11 @@ H5VL_pdc_dataset_specific(void *                        obj __attribute__((unuse
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_dataset_optional(void *                obj __attribute__((unused)),
+H5VL_pdc_dataset_optional(void *obj __attribute__((unused)),
                           H5VL_optional_args_t *args __attribute__((unused)),
                           hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_dataset_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -1656,8 +1679,7 @@ herr_t
 H5VL_pdc_dataset_close(void *_dset, hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered dataset_close\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *dset = (H5VL_pdc_obj_t *)_dset;
@@ -1689,58 +1711,58 @@ done:
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_datatype_commit(void *                   obj __attribute__((unused)),
+H5VL_pdc_datatype_commit(void *obj __attribute__((unused)),
                          const H5VL_loc_params_t *loc_params __attribute__((unused)),
                          const char *name __attribute__((unused)), hid_t type_id __attribute__((unused)),
                          hid_t lcpl_id __attribute__((unused)), hid_t tcpl_id __attribute__((unused)),
                          hid_t tapl_id __attribute__((unused)), hid_t dxpl_id __attribute__((unused)),
                          void **req __attribute__((unused)))
 {
-    return (void *)-1;
+    return (void *)0;
 } /* end H5VL_pdc_datatype_commit() */
 
 /*---------------------------------------------------------------------------*/
 static void *
-H5VL_pdc_datatype_open(void *                   obj __attribute__((unused)),
+H5VL_pdc_datatype_open(void *obj __attribute__((unused)),
                        const H5VL_loc_params_t *loc_params __attribute__((unused)),
                        const char *name __attribute__((unused)), hid_t tapl_id __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return (void *)-1;
+    return (void *)0;
 } /* end H5VL_pdc_datatype_open() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_get(void *                    dt __attribute__((unused)),
+H5VL_pdc_datatype_get(void *dt __attribute__((unused)),
                       H5VL_datatype_get_args_t *args __attribute__((unused)),
                       hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_datatype_get() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_specific(void *                         obj __attribute__((unused)),
+H5VL_pdc_datatype_specific(void *obj __attribute__((unused)),
                            H5VL_datatype_specific_args_t *args __attribute__((unused)),
                            hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_datatype_specific() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_datatype_optional(void *                obj __attribute__((unused)),
+H5VL_pdc_datatype_optional(void *obj __attribute__((unused)),
                            H5VL_optional_args_t *args __attribute__((unused)),
                            hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_datatype_optional() */
 
 static herr_t
 H5VL_pdc_datatype_close(void *dt __attribute__((unused)), hid_t dxpl_id __attribute__((unused)),
                         void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_datatype_close() */
 
 /*---------------------------------------------------------------------------*/
@@ -1748,8 +1770,7 @@ herr_t
 H5VL_pdc_introspect_get_conn_cls(void *obj, H5VL_get_conn_lvl_t lvl, const H5VL_class_t **conn_cls)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered get_conn_cls\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
@@ -1771,8 +1792,7 @@ herr_t
 H5VL_pdc_introspect_get_cap_flags(const void *_info, uint64_t *cap_flags)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered get_cap_flags\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     const H5VL_pdc_info_t *info = (const H5VL_pdc_info_t *)_info;
@@ -1794,8 +1814,7 @@ H5VL_pdc_introspect_opt_query(void *obj __attribute__((unused)), H5VL_subclass_t
                               int opt_type __attribute__((unused)), uint64_t *flags __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered opt_query\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     /* H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj; */
@@ -1813,8 +1832,7 @@ H5VL_pdc_group_create(void *obj, const H5VL_loc_params_t *loc_params __attribute
                       hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered group_create\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *group;
@@ -1848,14 +1866,13 @@ H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__
                     hid_t gapl_id __attribute__((unused)), hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered group_open\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *group;
     H5VL_pdc_obj_t *o          = (H5VL_pdc_obj_t *)obj;
     void *          under      = NULL;
-    char *          group_name = (char *)malloc(strlen(name) + 1);
+    char *          group_name = (char *)calloc(1, strlen(name) + 1);
     strcpy(group_name, name);
 
     group             = H5VL_pdc_new_obj(under, o->under_vol_id);
@@ -1883,8 +1900,7 @@ H5VL_pdc_group_get(void *obj __attribute__((unused)), H5VL_group_get_args_t *arg
                    hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered group_get\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     return 0;
 } /* end H5VL_pdc_group_get() */
@@ -1895,7 +1911,7 @@ H5VL_pdc_group_specific(void *                      obj __attribute__((unused)),
                         H5VL_group_specific_args_t *args __attribute__((unused)),
                         hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_group_specific() */
 
 /*---------------------------------------------------------------------------*/
@@ -1903,7 +1919,7 @@ static herr_t
 H5VL_pdc_group_optional(void *obj __attribute__((unused)), H5VL_optional_args_t *args __attribute__((unused)),
                         hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_group_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -1912,8 +1928,7 @@ H5VL_pdc_group_close(void *grp __attribute__((unused)), hid_t dxpl_id __attribut
                      void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered group_close\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     return 0;
@@ -1926,7 +1941,7 @@ H5VL_pdc_link_create(H5VL_link_create_args_t *args __attribute__((unused)), void
                      hid_t lcpl_id __attribute__((unused)), hid_t lapl_id __attribute__((unused)),
                      hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_create() */
 
 /*---------------------------------------------------------------------------*/
@@ -1938,7 +1953,7 @@ H5VL_pdc_link_copy(void *                   src_obj __attribute__((unused)),
                    hid_t lcpl_id __attribute__((unused)), hid_t lapl_id __attribute__((unused)),
                    hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_copy() */
 
 /*---------------------------------------------------------------------------*/
@@ -1950,7 +1965,7 @@ H5VL_pdc_link_move(void *                   src_obj __attribute__((unused)),
                    hid_t lcpl_id __attribute__((unused)), hid_t lapl_id __attribute__((unused)),
                    hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_move() */
 
 /*---------------------------------------------------------------------------*/
@@ -1960,7 +1975,7 @@ H5VL_pdc_link_get(void *                   obj __attribute__((unused)),
                   H5VL_link_get_args_t *args __attribute__((unused)), hid_t dxpl_id __attribute__((unused)),
                   void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_get() */
 
 /*---------------------------------------------------------------------------*/
@@ -1970,7 +1985,7 @@ H5VL_pdc_link_specific(void *                     obj __attribute__((unused)),
                        H5VL_link_specific_args_t *args __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_specific() */
 
 /*---------------------------------------------------------------------------*/
@@ -1980,7 +1995,7 @@ H5VL_pdc_link_optional(void *                   obj __attribute__((unused)),
                        H5VL_optional_args_t *   args __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_link_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -1990,8 +2005,7 @@ H5VL_pdc_attr_create(void *obj, const H5VL_loc_params_t *loc_params __attribute_
                      hid_t aapl_id __attribute__((unused)), hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_create\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *attr;
@@ -2021,8 +2035,7 @@ H5VL_pdc_attr_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__(
                    void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_open\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *attr;
     H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)obj;
@@ -2043,8 +2056,7 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id __attribute__((unused)), void *
                    hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_read\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
     void *          tag_value;
@@ -2071,8 +2083,7 @@ H5VL_pdc_attr_write(void *attr, hid_t mem_type_id __attribute__((unused)), const
                     hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_write\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
@@ -2091,8 +2102,7 @@ static herr_t
 H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_get\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
@@ -2114,7 +2124,7 @@ H5VL_pdc_attr_specific(void *                     obj __attribute__((unused)),
                        H5VL_attr_specific_args_t *args __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_attr_specific() */
 
 /*---------------------------------------------------------------------------*/
@@ -2122,7 +2132,7 @@ static herr_t
 H5VL_pdc_attr_optional(void *obj __attribute__((unused)), H5VL_optional_args_t *args __attribute__((unused)),
                        hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_attr_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -2131,8 +2141,7 @@ H5VL_pdc_attr_close(void *attr __attribute__((unused)), hid_t dxpl_id __attribut
                     void **req __attribute__((unused)))
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered attr_close\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     /* H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr; */
@@ -2148,8 +2157,7 @@ H5VL_pdc_object_open(void *obj, const H5VL_loc_params_t *loc_params, H5I_type_t 
                      void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered object_open\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *new_obj;
@@ -2203,7 +2211,7 @@ H5VL_pdc_object_copy(void *                   src_obj __attribute__((unused)),
                      hid_t lcpl_id __attribute__((unused)), hid_t dxpl_id __attribute__((unused)),
                      void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_object_copy() */
 
 /*---------------------------------------------------------------------------*/
@@ -2212,8 +2220,7 @@ H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_
                     hid_t dxpl_id, void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered object_get\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
@@ -2234,8 +2241,7 @@ H5VL_pdc_object_specific(void *obj, const H5VL_loc_params_t *loc_params, H5VL_ob
                          hid_t dxpl_id, void **req)
 {
 #ifdef ENABLE_LOGGING
-    fprintf(stderr, "\nentered object_specific\n");
-    fflush(stdout);
+    fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
@@ -2261,7 +2267,7 @@ H5VL_pdc_object_optional(void *                   obj __attribute__((unused)),
                          H5VL_optional_args_t *   args __attribute__((unused)),
                          hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_object_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -2269,7 +2275,7 @@ static herr_t
 H5VL_pdc_request_wait(void *obj __attribute__((unused)), uint64_t timeout __attribute__((unused)),
                       H5VL_request_status_t *status __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_wait() */
 
 /*---------------------------------------------------------------------------*/
@@ -2277,7 +2283,7 @@ static herr_t
 H5VL_pdc_request_notify(void *obj __attribute__((unused)), H5VL_request_notify_t cb __attribute__((unused)),
                         void *ctx __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_notify() */
 
 /*---------------------------------------------------------------------------*/
@@ -2285,7 +2291,7 @@ static herr_t
 H5VL_pdc_request_cancel(void *                 obj __attribute__((unused)),
                         H5VL_request_status_t *status __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_cancel() */
 
 /*---------------------------------------------------------------------------*/
@@ -2293,7 +2299,7 @@ static herr_t
 H5VL_pdc_request_specific(void *                        obj __attribute__((unused)),
                           H5VL_request_specific_args_t *args __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_specific() */
 
 /*---------------------------------------------------------------------------*/
@@ -2301,14 +2307,14 @@ static herr_t
 H5VL_pdc_request_optional(void *                obj __attribute__((unused)),
                           H5VL_optional_args_t *args __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_optional() */
 
 /*---------------------------------------------------------------------------*/
 static herr_t
 H5VL_pdc_request_free(void *obj __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_request_free() */
 
 /*---------------------------------------------------------------------------*/
@@ -2317,7 +2323,7 @@ H5VL_pdc_blob_put(void *obj __attribute__((unused)), const void *buf __attribute
                   size_t size __attribute__((unused)), void *blob_id __attribute__((unused)),
                   void *ctx __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_blob_put() */
 
 /*---------------------------------------------------------------------------*/
@@ -2326,7 +2332,7 @@ H5VL_pdc_blob_get(void *obj __attribute__((unused)), const void *blob_id __attri
                   void *buf __attribute__((unused)), size_t size __attribute__((unused)),
                   void *ctx __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_blob_get() */
 
 /*---------------------------------------------------------------------------*/
@@ -2334,7 +2340,7 @@ herr_t
 H5VL_pdc_blob_specific(void *obj __attribute__((unused)), void *blob_id __attribute__((unused)),
                        H5VL_blob_specific_args_t *args __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_blob_specific() */
 
 /*---------------------------------------------------------------------------*/
@@ -2342,7 +2348,7 @@ herr_t
 H5VL_pdc_blob_optional(void *obj __attribute__((unused)), void *blob_id __attribute__((unused)),
                        H5VL_optional_args_t *args __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_blob_optional() */
 
 /*---------------------------------------------------------------------------*/
@@ -2350,7 +2356,7 @@ static herr_t
 H5VL_pdc_token_cmp(void *obj __attribute__((unused)), const H5O_token_t *token1 __attribute__((unused)),
                    const H5O_token_t *token2 __attribute__((unused)), int *cmp_value __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_token_cmp() */
 
 /*---------------------------------------------------------------------------*/
@@ -2359,7 +2365,7 @@ H5VL_pdc_token_to_str(void *obj __attribute__((unused)), H5I_type_t obj_type __a
                       const H5O_token_t *token __attribute__((unused)),
                       char **            token_str __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_token_to_str() */
 
 /*---------------------------------------------------------------------------*/
@@ -2368,7 +2374,7 @@ H5VL_pdc_token_from_str(void *obj __attribute__((unused)), H5I_type_t obj_type _
                         const char * token_str __attribute__((unused)),
                         H5O_token_t *token __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_token_from_str() */
 
 /*---------------------------------------------------------------------------*/
@@ -2376,5 +2382,5 @@ herr_t
 H5VL_pdc_optional(void *obj __attribute__((unused)), H5VL_optional_args_t *args __attribute__((unused)),
                   hid_t dxpl_id __attribute__((unused)), void **req __attribute__((unused)))
 {
-    return -1;
+    return 0;
 } /* end H5VL_pdc_optional() */
