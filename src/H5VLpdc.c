@@ -74,12 +74,12 @@ typedef struct H5VL_pdc_obj_t {
     pdcid_t        reg_id_to;
     H5I_type_t     h5i_type;
     /* File object elements */
-    MPI_Comm comm;
-    MPI_Info info;
-    int      my_rank;
-    int      num_procs;
-    pdcid_t  cont_id;
-    int      nobj;
+    MPI_Comm               comm;
+    MPI_Info               info;
+    int                    my_rank;
+    int                    num_procs;
+    pdcid_t                cont_id;
+    int                    nobj;
     struct H5VL_pdc_obj_t *file_obj_ptr;
     H5_LIST_HEAD(H5VL_pdc_obj_t) ids;
     /* Dataset object elements */
@@ -873,12 +873,12 @@ H5VL__pdc_dset_init(H5VL_pdc_obj_t *file)
         HGOTO_ERROR(H5E_RESOURCE, H5E_CANTALLOC, NULL, "can't allocate PDC dataset struct");
     memset(dset, 0, sizeof(H5VL_pdc_obj_t));
 
-    dset->reg_id_from = 0;
-    dset->reg_id_to   = 0;
-    dset->mapped      = 0;
-    dset->type_id     = 0;
-    dset->space_id    = 0;
-    dset->h5i_type    = H5I_DATASET;
+    dset->reg_id_from  = 0;
+    dset->reg_id_to    = 0;
+    dset->mapped       = 0;
+    dset->type_id      = 0;
+    dset->space_id     = 0;
+    dset->h5i_type     = H5I_DATASET;
     dset->file_obj_ptr = file->file_obj_ptr;
 
     /* Set return value */
@@ -1214,8 +1214,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
                         hid_t dapl_id, hid_t dxpl_id, void **req __attribute__((unused)))
 {
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    int buff_len;
-    H5T_class_t dclass;
+    int             buff_len;
+    H5T_class_t     dclass;
 
     FUNC_ENTER_VOL(void *, NULL)
 
@@ -1333,7 +1333,7 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     // TODO: temporary workaround for writing compound data, as current PDC doesn't support
     //       read doesn't work
     if (dclass == H5T_COMPOUND)
-        dims[ndim-1] *= H5Tget_size(type_id);
+        dims[ndim - 1] *= H5Tget_size(type_id);
     PDCprop_set_obj_dims(obj_prop, ndim, dims);
 
     /* Create PDC object */
@@ -1469,8 +1469,8 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         dset = (H5VL_pdc_obj_t *)_dset[u];
 
 #ifdef ENABLE_LOGGING
-        fprintf(stderr, "Rank %d: writing [%s][%s][%s]\n",
-                my_rank_g, dset->file_name, dset->group_name, dset->obj_name);
+        fprintf(stderr, "Rank %d: writing [%s][%s][%s]\n", my_rank_g, dset->file_name, dset->group_name,
+                dset->obj_name);
 #endif
         if (file_space_id[u] == H5S_ALL)
             file_space_id[u] = dset->space_id;
@@ -1491,7 +1491,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         //       read doesn't work
         type_size = H5Tget_size(mem_type_id[u]);
         if (H5Tget_class(mem_type_id[u]) == H5T_COMPOUND)
-            dims[ndim-1] *= type_size;
+            dims[ndim - 1] *= type_size;
 
         /* printf("Rank %d: mem offset %lu\n", dset->my_rank, offset[0]); */
         /* printf("Rank %d: mem count  %lu\n", dset->my_rank, dims[0]); */
@@ -1875,9 +1875,9 @@ H5VL_pdc_group_create(void *obj, const H5VL_loc_params_t *loc_params __attribute
     strcpy(file_name, o->file_name);
     group->file_name = file_name;
 
-    group->comm    = o->comm;
-    group->info    = o->info;
-    group->cont_id = o->cont_id;
+    group->comm         = o->comm;
+    group->info         = o->info;
+    group->cont_id      = o->cont_id;
     group->file_obj_ptr = o->file_obj_ptr;
 
     /* Check for async request */
@@ -1910,9 +1910,9 @@ H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__
     strcpy(file_name, o->file_name);
     group->file_name = file_name;
 
-    group->comm    = o->comm;
-    group->info    = o->info;
-    group->cont_id = o->cont_id;
+    group->comm         = o->comm;
+    group->info         = o->info;
+    group->cont_id      = o->cont_id;
     group->file_obj_ptr = o->file_obj_ptr;
 
     /* Check for async request */
@@ -2047,10 +2047,10 @@ H5VL_pdc_attr_create(void *obj, const H5VL_loc_params_t *loc_params __attribute_
     attr->attr_name       = attr_name;
     value_size            = H5Sget_select_npoints(space_id) * H5Tget_size(type_id);
     attr->attr_value_size = value_size;
-    attr->obj_id = o->obj_id;
-    attr->cont_id = o->cont_id;
+    attr->obj_id          = o->obj_id;
+    attr->cont_id         = o->cont_id;
 
-    attr->h5i_type        = H5I_ATTR;
+    attr->h5i_type = H5I_ATTR;
 
     /* Check for async request */
     if (req && *req)
@@ -2126,12 +2126,14 @@ H5VL_pdc_attr_write(void *attr, hid_t mem_type_id __attribute__((unused)), const
     herr_t          ret_value;
 
     if (o->obj_id > 0)
-        ret_value = PDCobj_put_tag(o->obj_id, (char *)o->attr_name, (void *)buf, PDC_CHAR, o->attr_value_size);
+        ret_value =
+            PDCobj_put_tag(o->obj_id, (char *)o->attr_name, (void *)buf, PDC_CHAR, o->attr_value_size);
     else if (o->cont_id > 0)
-        ret_value = PDCcont_put_tag(o->cont_id, (char *)o->attr_name, (void *)buf, PDC_CHAR, o->attr_value_size);
+        ret_value =
+            PDCcont_put_tag(o->cont_id, (char *)o->attr_name, (void *)buf, PDC_CHAR, o->attr_value_size);
     /* else */
     /*     HGOTO_ERROR(H5E_VOL, H5E_WRITEERROR, FAIL, "no valid PDC obj/cont ID"); */
-        
+
     /* Check for async request */
     if (req && *req)
         *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
@@ -2283,13 +2285,13 @@ H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_
             *(args->args.get_type.obj_type) = o->h5i_type;
             break;
 
-        /* case H5VL_OBJECT_GET_INFO: */
-        /*     H5O_info2_t     *oinfo        = args->args.get_info.oinfo; */
-        /*     unsigned         fields       = args->args.get_info.fields; */
-        /*     break; */
+            /* case H5VL_OBJECT_GET_INFO: */
+            /*     H5O_info2_t     *oinfo        = args->args.get_info.oinfo; */
+            /*     unsigned         fields       = args->args.get_info.fields; */
+            /*     break; */
 
         default:
-	    fprintf(stderr, "Rank %d: %s unsupported get type\n", my_rank_g, __func__);
+            fprintf(stderr, "Rank %d: %s unsupported get type\n", my_rank_g, __func__);
             HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported object get operation");
     } /* end switch */
 
