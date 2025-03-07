@@ -2077,6 +2077,7 @@ H5VL_pdc_attr_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__(
     attr            = H5VL_pdc_new_obj(under, o->under_vol_id);
     attr->attr_name = attr_name;
     attr->obj_id    = o->obj_id;
+    attr->cont_id   = o->cont_id;
 
     return (void *)attr;
 } /* end H5VL_pdc_attr_open() */
@@ -2089,9 +2090,8 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id __attribute__((unused)), void *
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
-    void *          tag_value;
-    /* psize_t *       value_size; */
-    perr_t         ret_value;
+    void *tag_value = NULL;
+    perr_t  ret_value;
     pdc_var_type_t value_type;
 
     if (o->obj_id > 0) {
@@ -2148,17 +2148,71 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
+    FUNC_ENTER_VOL(herr_t, SUCCEED)
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    herr_t          ret_value;
+    perr_t ret_value;
+    void *tag_value = NULL;
+    pdc_var_type_t value_type;
 
-    ret_value = H5VLattr_get(o->under_object, o->under_vol_id, args, dxpl_id, req);
+    if (o->obj_id > 0) {
+        ret_value =
+            PDCobj_get_tag(o->obj_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
+    }
+    else if (o->cont_id > 0) {
+        ret_value =
+            PDCcont_get_tag(o->cont_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
+    }
 
+    switch (args->op_type) {
+        case H5VL_ATTR_GET_SPACE:
+            hsize_t dims[1];
+            dims[0] = o->attr_value_size / PDC_get_var_type_size(value_type);
+            // TODO: handle compound
+            hid_t space_id = H5Screate_simple(1, dims, NULL);
+            args->args.get_space.space_id = space_id;
+
+            break;
+        case H5VL_ATTR_GET_TYPE:
+            hid_t dtype;
+            switch (value_type) {
+                case PDC_INT:
+                    dtype = H5T_NATIVE_INT;
+                    break;
+                case PDC_FLOAT:
+                    dtype = H5T_NATIVE_FLOAT;
+                    break;
+                case PDC_DOUBLE:
+                    dtype = H5T_NATIVE_DOUBLE;
+                    break;
+                case PDC_CHAR:
+                    dtype = H5T_NATIVE_CHAR;
+                    break;
+
+                default:
+                    dtype = H5T_NATIVE_CHAR;
+                    /* fprintf(stderr, "Rank %d: %s unsupported PDC datatype type\n", my_rank_g, __func__); */
+                    /* HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation"); */
+
+            }
+            args->args.get_type.type_id = dtype;
+
+            break;
+        default:
+            fprintf(stderr, "Rank %d: %s unsupported get type\n", my_rank_g, __func__);
+            HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation");
+
+    }
+
+    if (tag_value)
+        free(tag_value);
+
+done:
     /* Check for async request */
     if (req && *req)
         *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
 
-    return ret_value;
+    FUNC_LEAVE_VOL
 } /* end H5VL_pdc_attr_get() */
 
 /*---------------------------------------------------------------------------*/
