@@ -1433,7 +1433,7 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     /* pdcid_t id_name    = (pdcid_t)name; */
     obj_info       = PDCobj_get_info(dset->obj_id);
     dset->space_id = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
-    dset->pdc_type     = obj_info->obj_pt->type;
+    dset->pdc_type = obj_info->obj_pt->type;
     o->nobj++;
     H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
 
@@ -1459,7 +1459,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
     size_t          type_size;
     int             ndim;
     pdcid_t         region_local, region_remote;
-    hsize_t         dims[H5S_MAX_RANK]={0};
+    hsize_t         dims[H5S_MAX_RANK] = {0};
     perr_t          ret;
     pdcid_t         transfer_request;
 
@@ -1495,7 +1495,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
 
         /* printf("Rank %d: mem offset %lu\n", dset->my_rank, offset[0]); */
         /* printf("Rank %d: mem count  %lu\n", dset->my_rank, dims[0]); */
-        region_local          = PDCregion_create(ndim, offset, dims);
+        region_local      = PDCregion_create(ndim, offset, dims);
         dset->reg_id_from = region_local;
 
         /* H5VL__pdc_sel_to_recx_iov(file_space_id[u], type_size, offset); */
@@ -1506,7 +1506,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         if (ndim > 1)
             printf("Rank %d: file offset1 %lu, count1 %lu\n", my_rank_g, offset[1], dims[1]);
 #endif
-        region_remote       = PDCregion_create(ndim, offset, dims);
+        region_remote   = PDCregion_create(ndim, offset, dims);
         dset->reg_id_to = region_remote;
 
         transfer_request =
@@ -1547,7 +1547,7 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
     uint64_t *      offset;
     int             ndim;
     pdcid_t         region_local, region_remote;
-    hsize_t         dims[H5S_MAX_RANK]={0};
+    hsize_t         dims[H5S_MAX_RANK] = {0};
     perr_t          ret;
     pdcid_t         transfer_request;
 
@@ -1569,9 +1569,9 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
                 HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
         }
 
-        offset = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
-        offset[0] = 0;
-        region_local = PDCregion_create(ndim, offset, dims);
+        offset            = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
+        offset[0]         = 0;
+        region_local      = PDCregion_create(ndim, offset, dims);
         dset->reg_id_from = region_local;
 
         type_size = H5Tget_size(mem_type_id[u]);
@@ -1579,7 +1579,7 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
         if (file_space_id[u] != H5S_ALL)
             H5VL__pdc_sel_to_recx_iov(file_space_id[u], 1, offset);
 
-        region_remote = PDCregion_create(ndim, offset, dims);
+        region_remote   = PDCregion_create(ndim, offset, dims);
         dset->reg_id_to = region_remote;
         free(offset);
 
@@ -2154,7 +2154,8 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
 
                 default:
                     fprintf(stderr, "Rank %d: %s unsupported PDC datatype type\n", my_rank_g, __func__);
-                    HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation");
+                    HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL,
+                                "invalid or unsupported attribute get operation");
             }
             args->args.get_type.type_id = dtype;
 
