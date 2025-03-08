@@ -2051,10 +2051,10 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id __attribute__((unused)), void *
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
-    void *tag_value = NULL;
-    perr_t  ret_value;
-    pdc_var_type_t value_type;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)attr;
+    void *          tag_value = NULL;
+    perr_t          ret_value;
+    pdc_var_type_t  value_type;
 
     if (o->obj_id > 0) {
         ret_value =
@@ -2113,9 +2113,9 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    perr_t ret_value;
-    void *tag_value = NULL;
-    pdc_var_type_t value_type;
+    perr_t          ret_value;
+    void *          tag_value = NULL;
+    pdc_var_type_t  value_type;
 
     if (o->obj_id > 0) {
         ret_value =
@@ -2131,7 +2131,7 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
             hsize_t dims[1];
             dims[0] = o->attr_value_size / PDC_get_var_type_size(value_type);
             // TODO: handle compound
-            hid_t space_id = H5Screate_simple(1, dims, NULL);
+            hid_t space_id                = H5Screate_simple(1, dims, NULL);
             args->args.get_space.space_id = space_id;
 
             break;
@@ -2155,7 +2155,6 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
                 default:
                     fprintf(stderr, "Rank %d: %s unsupported PDC datatype type\n", my_rank_g, __func__);
                     HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation");
-
             }
             args->args.get_type.type_id = dtype;
 
@@ -2163,7 +2162,6 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
         default:
             fprintf(stderr, "Rank %d: %s unsupported get type\n", my_rank_g, __func__);
             HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation");
-
     }
 
     if (tag_value)
