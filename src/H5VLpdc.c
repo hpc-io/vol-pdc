@@ -497,7 +497,7 @@ H5VL_pdc_new_obj(void *under_obj, hid_t under_vol_id)
     new_obj               = (H5VL_pdc_obj_t *)calloc(1, sizeof(H5VL_pdc_obj_t));
     new_obj->under_object = under_obj;
     new_obj->under_vol_id = under_vol_id;
-    H5Iinc_ref(new_obj->under_vol_id);
+    /* H5Iinc_ref(new_obj->under_vol_id); */
 
     return new_obj;
 } /* end H5VL__pdc_new_obj() */
@@ -901,14 +901,13 @@ H5VL__pdc_dset_free(H5VL_pdc_obj_t *dset)
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    if (dset->space_id != 0 && H5Idec_ref(dset->space_id) < 0)
-        HDONE_ERROR(H5E_DATASET, H5E_CANTDEC, FAIL, "failed to close space");
     H5Pclose(dset->dcpl_id);
     H5Pclose(dset->dapl_id);
     H5Pclose(dset->dxpl_id);
     if (dset->type_id != 0)
         H5Tclose(dset->type_id);
-    /* H5Sclose(dset->space_id); */
+    if (dset->space_id != 0 && dset->space_id != H5S_ALL)
+        H5Sclose(dset->space_id);
 
     H5_LIST_REMOVE(dset, entry);
     free(dset);
