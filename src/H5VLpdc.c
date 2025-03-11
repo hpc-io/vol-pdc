@@ -1057,7 +1057,7 @@ H5VL_pdc_file_close(void *_file, hid_t dxpl_id __attribute__((unused)), void **r
 #endif
     H5VL_pdc_obj_t *file = (H5VL_pdc_obj_t *)_file;
     /* H5VL_pdc_obj_t *dset = NULL; */
-    perr_t          ret;
+    perr_t ret;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1224,7 +1224,6 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     pdcid_t         obj_prop, obj_id;
     hsize_t         dims[H5S_MAX_RANK];
 
-
     FUNC_ENTER_VOL(void *, NULL)
 
 #ifdef ENABLE_LOGGING
@@ -1364,7 +1363,8 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     // TODO: temporary workaround for writing compound data, as current PDC doesn't support
     //       compound datatype
     if (dclass == H5T_COMPOUND)
-        PDCobj_put_tag(obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void *)&o->compound_size, PDC_SIZE_T, sizeof(psize_t));
+        PDCobj_put_tag(obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void *)&o->compound_size, PDC_SIZE_T,
+                       sizeof(psize_t));
 
     dset->obj_id   = obj_id;
     dset->h5i_type = H5I_DATASET;
@@ -1450,13 +1450,13 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     // TODO: temporary workaround for writing compound data, as current PDC doesn't support
     //       compound datatype
     if (dset->pdc_type == PDC_CHAR) {
-        psize_t value_size;
+        psize_t        value_size;
         pdc_var_type_t value_type;
-        psize_t *value;
-        PDCobj_get_tag(dset->obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void**)&value, &value_type, &value_size);
+        psize_t *      value;
+        PDCobj_get_tag(dset->obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void **)&value, &value_type, &value_size);
         if (value_size > 0) {
             dset->compound_size = *value;
-            obj_info->obj_pt->dims[obj_info->obj_pt->ndim-1] /= *value;
+            obj_info->obj_pt->dims[obj_info->obj_pt->ndim - 1] /= *value;
         }
     }
 
@@ -1526,7 +1526,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
 #endif
 
     H5VL_pdc_obj_t *dset;
-    uint64_t        offset[H5S_MAX_RANK]={0};
+    uint64_t        offset[H5S_MAX_RANK] = {0};
     size_t          type_size;
     int             ndim;
     pdcid_t         region_local, region_remote;
@@ -1598,7 +1598,6 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
         }
-
     }
 
 done:
@@ -1616,7 +1615,7 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
 #endif
 
     H5VL_pdc_obj_t *dset;
-    uint64_t        offset[H5S_MAX_RANK]={0};
+    uint64_t        offset[H5S_MAX_RANK] = {0};
     int             ndim;
     pdcid_t         region_local, region_remote;
     hsize_t         dims[H5S_MAX_RANK] = {0};
@@ -1650,10 +1649,10 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
         // TODO: temporary workaround for reading compound data, as current PDC doesn't support
         //       compound datatype
         if (dset->compound_size > 0) {
-            dims[ndim-1] *= dset->compound_size;
+            dims[ndim - 1] *= dset->compound_size;
         }
 
-        region_local = PDCregion_create(ndim, offset, dims);
+        region_local      = PDCregion_create(ndim, offset, dims);
         dset->reg_id_from = region_local;
 
         if (file_space_id[u] != H5S_ALL)
@@ -2166,7 +2165,7 @@ H5VL_pdc_attr_write(void *attr, hid_t mem_type_id __attribute__((unused)), const
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)attr;
     herr_t          ret_value = FAIL;
 
     if (o->obj_id > 0)
@@ -2194,8 +2193,8 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
 #endif
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    void *tag_value = NULL;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)obj;
+    void *          tag_value = NULL;
     pdc_var_type_t  value_type;
 
     if (o->obj_id > 0) {
@@ -2355,7 +2354,7 @@ H5VL_pdc_object_copy(void *                   src_obj __attribute__((unused)),
 /*---------------------------------------------------------------------------*/
 static herr_t
 H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params __attribute__((unused)),
-                    H5VL_object_get_args_t *args, hid_t dxpl_id  __attribute__((unused)), void **req)
+                    H5VL_object_get_args_t *args, hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
