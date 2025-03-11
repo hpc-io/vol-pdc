@@ -37,7 +37,6 @@
 #define H5VL_PDC_SEQ_LIST_LEN 128
 /* (Uncomment to enable) */
 /* #define ENABLE_LOGGING */
-#define USE_REGION_TRANSFER 1
 
 /* Remove warnings when connector does not use callback arguments */
 #if defined(__cplusplus)
@@ -69,10 +68,12 @@ typedef struct H5VL_pdc_obj_t {
     char *         group_name;
     char *         attr_name;
     psize_t        attr_value_size;
-    pdc_var_type_t type;
+    pdc_var_type_t pdc_type;
+    psize_t        compound_size;
     pdcid_t        reg_id_from;
     pdcid_t        reg_id_to;
     H5I_type_t     h5i_type;
+    H5O_type_t     h5o_type;
     /* File object elements */
     MPI_Comm               comm;
     MPI_Info               info;
@@ -496,7 +497,7 @@ H5VL_pdc_new_obj(void *under_obj, hid_t under_vol_id)
     new_obj               = (H5VL_pdc_obj_t *)calloc(1, sizeof(H5VL_pdc_obj_t));
     new_obj->under_object = under_obj;
     new_obj->under_vol_id = under_vol_id;
-    H5Iinc_ref(new_obj->under_vol_id);
+    /* H5Iinc_ref(new_obj->under_vol_id); */
 
     return new_obj;
 } /* end H5VL__pdc_new_obj() */
@@ -795,6 +796,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags __attribute__((unused)),
     file->under_object = file;
     file->under_vol_id = under_vol_id;
     file->h5i_type     = H5I_FILE;
+    /* file->h5o_type     = H5O_TYPE_FILE; */
     file->file_obj_ptr = file;
 
     if (NULL == (file->file_name = strdup(name)))
@@ -879,6 +881,7 @@ H5VL__pdc_dset_init(H5VL_pdc_obj_t *file)
     dset->type_id      = 0;
     dset->space_id     = 0;
     dset->h5i_type     = H5I_DATASET;
+    dset->h5o_type     = H5O_TYPE_DATASET;
     dset->file_obj_ptr = file->file_obj_ptr;
 
     /* Set return value */
@@ -898,13 +901,13 @@ H5VL__pdc_dset_free(H5VL_pdc_obj_t *dset)
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    if (dset->space_id != 0 && H5Idec_ref(dset->space_id) < 0)
-        HDONE_ERROR(H5E_DATASET, H5E_CANTDEC, FAIL, "failed to close space");
     H5Pclose(dset->dcpl_id);
     H5Pclose(dset->dapl_id);
     H5Pclose(dset->dxpl_id);
-    H5Tclose(dset->type_id);
-    /* H5Sclose(dset->space_id); */
+    if (dset->type_id != 0)
+        H5Tclose(dset->type_id);
+    if (dset->space_id != 0 && dset->space_id != H5S_ALL)
+        H5Sclose(dset->space_id);
 
     H5_LIST_REMOVE(dset, entry);
     free(dset);
@@ -1052,8 +1055,8 @@ H5VL_pdc_file_close(void *_file, hid_t dxpl_id __attribute__((unused)), void **r
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
     H5VL_pdc_obj_t *file = (H5VL_pdc_obj_t *)_file;
-    H5VL_pdc_obj_t *dset = NULL;
-    perr_t          ret;
+    /* H5VL_pdc_obj_t *dset = NULL; */
+    perr_t ret;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1214,8 +1217,11 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
                         hid_t dapl_id, hid_t dxpl_id, void **req __attribute__((unused)))
 {
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    int             buff_len;
+    int             buff_len, ndim;
     H5T_class_t     dclass;
+    H5VL_pdc_obj_t *dset = NULL;
+    pdcid_t         obj_prop, obj_id;
+    hsize_t         dims[H5S_MAX_RANK];
 
     FUNC_ENTER_VOL(void *, NULL)
 
@@ -1247,11 +1253,6 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
        slashes as a part of their names. */
     replace_multi_slash(new_name);
 
-    H5VL_pdc_obj_t *dset = NULL;
-    pdcid_t         obj_prop, obj_id;
-    int             ndim;
-    hsize_t         dims[H5S_MAX_RANK];
-
     if (!obj)
         HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, NULL, "parent object is NULL");
     if (!loc_params)
@@ -1281,28 +1282,27 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         case H5T_INTEGER:
             /* printf("Datatype class: Integer\n"); */
             PDCprop_set_obj_type(obj_prop, PDC_INT);
-            dset->type = PDC_INT;
+            dset->pdc_type = PDC_INT;
             break;
         case H5T_FLOAT:
             /* printf("Datatype class: Float\n"); */
             if (H5Tequal(H5T_NATIVE_DOUBLE, type_id) == TRUE) {
                 PDCprop_set_obj_type(obj_prop, PDC_DOUBLE);
-                dset->type = PDC_DOUBLE;
+                dset->pdc_type = PDC_DOUBLE;
             }
             else {
                 PDCprop_set_obj_type(obj_prop, PDC_FLOAT);
-                dset->type = PDC_FLOAT;
+                dset->pdc_type = PDC_FLOAT;
             }
             break;
         case H5T_STRING:
             /* printf("Datatype class: String\n"); */
-            PDCprop_set_obj_type(obj_prop, PDC_CHAR);
-            dset->type = PDC_CHAR;
+            PDCprop_set_obj_type(obj_prop, PDC_STRING);
+            dset->pdc_type = PDC_STRING;
             break;
         case H5T_COMPOUND:
-            printf("vol-pdc WARNING: Compound data can't be read back properly yet\n");
             PDCprop_set_obj_type(obj_prop, PDC_CHAR);
-            dset->type = PDC_CHAR;
+            dset->pdc_type = PDC_CHAR;
             break;
         case H5T_ARRAY:
             printf("Datatype class: Array is not supported in PDC\n");
@@ -1310,7 +1310,7 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         case H5T_ENUM:
             /* printf("Datatype class: Enum\n"); */
             PDCprop_set_obj_type(obj_prop, PDC_INT);
-            dset->type = PDC_INT;
+            dset->pdc_type = PDC_INT;
             break;
         case H5T_REFERENCE:
             printf("Datatype class: Reference is not supported in PDC\n");
@@ -1331,9 +1331,14 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
         HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, NULL, "can't get dimensions");
 
     // TODO: temporary workaround for writing compound data, as current PDC doesn't support
-    //       read doesn't work
-    if (dclass == H5T_COMPOUND)
-        dims[ndim - 1] *= H5Tget_size(type_id);
+    //       compound datatype.
+    //       Multiple the last dimension by the compound dtype size so we can write the
+    //       correct amount of total data, and add a tag to record for future read.
+    if (dclass == H5T_COMPOUND) {
+        o->compound_size = H5Tget_size(type_id);
+        dims[ndim - 1] *= o->compound_size;
+    }
+
     PDCprop_set_obj_dims(obj_prop, ndim, dims);
 
     /* Create PDC object */
@@ -1354,8 +1359,15 @@ H5VL_pdc_dataset_create(void *obj, const H5VL_loc_params_t *loc_params, const ch
     fprintf(stderr, "Rank %d: PDC obj id %lu, dims %lu\n", o->my_rank, obj_id, dims[0]);
 #endif
 
+    // TODO: temporary workaround for writing compound data, as current PDC doesn't support
+    //       compound datatype
+    if (dclass == H5T_COMPOUND)
+        PDCobj_put_tag(obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void *)&o->compound_size, PDC_SIZE_T,
+                       sizeof(psize_t));
+
     dset->obj_id   = obj_id;
     dset->h5i_type = H5I_DATASET;
+    dset->h5o_type = H5O_TYPE_DATASET;
     strcpy(dset->obj_name, name);
     o->nobj++;
     H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
@@ -1432,8 +1444,22 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
     dset->under_object = dset;
     /* pdcid_t id_name    = (pdcid_t)name; */
     obj_info       = PDCobj_get_info(dset->obj_id);
+    dset->pdc_type = obj_info->obj_pt->type;
+
+    // TODO: temporary workaround for writing compound data, as current PDC doesn't support
+    //       compound datatype
+    if (dset->pdc_type == PDC_CHAR) {
+        psize_t        value_size;
+        pdc_var_type_t value_type;
+        psize_t *      value;
+        PDCobj_get_tag(dset->obj_id, "PDC_COMPOUND_DTYPE_SIZE", (void **)&value, &value_type, &value_size);
+        if (value_size > 0) {
+            dset->compound_size = *value;
+            obj_info->obj_pt->dims[obj_info->obj_pt->ndim - 1] /= *value;
+        }
+    }
+
     dset->space_id = H5Screate_simple(obj_info->obj_pt->ndim, obj_info->obj_pt->dims, NULL);
-    dset->type     = obj_info->obj_pt->type;
     o->nobj++;
     H5_LIST_INSERT_HEAD(&o->ids, dset, entry);
 
@@ -1443,6 +1469,50 @@ H5VL_pdc_dataset_open(void *obj, const H5VL_loc_params_t *loc_params, const char
 done:
     FUNC_LEAVE_VOL
 } /* end H5VL_pdc_dataset_open() */
+
+int
+_check_mem_type_id(H5T_class_t h5_dclass, pdc_var_type_t pdc_dtype)
+{
+    int is_match = 0;
+    switch (h5_dclass) {
+        case H5T_INTEGER:
+            if (pdc_dtype == PDC_INT)
+                is_match = 1;
+            break;
+        case H5T_FLOAT:
+            if (pdc_dtype == PDC_FLOAT || pdc_dtype == PDC_DOUBLE)
+                is_match = 1;
+            break;
+        case H5T_STRING:
+            if (pdc_dtype == PDC_CHAR || pdc_dtype == PDC_STRING)
+                is_match = 1;
+            break;
+        case H5T_COMPOUND:
+            // TODO: temp workaround
+            if (pdc_dtype == PDC_CHAR)
+                is_match = 1;
+            break;
+        case H5T_ARRAY:
+            printf("Datatype class: Array is not supported in PDC\n");
+            break;
+        case H5T_ENUM:
+            if (pdc_dtype == PDC_INT)
+                is_match = 1;
+            break;
+        case H5T_REFERENCE:
+            printf("Datatype class: Reference is not supported in PDC\n");
+            break;
+        case H5T_OPAQUE:
+            printf("Datatype class: Opaque is not supported in PDC\n");
+            break;
+        case H5T_NO_CLASS:
+        default:
+            printf("Unknown or no datatype class\n");
+            break;
+    }
+
+    return is_match;
+}
 
 /*---------------------------------------------------------------------------*/
 herr_t
@@ -1455,13 +1525,14 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
 #endif
 
     H5VL_pdc_obj_t *dset;
-    uint64_t *      offset = NULL;
+    uint64_t        offset[H5S_MAX_RANK] = {0};
     size_t          type_size;
     int             ndim;
-    pdcid_t         region_x, region_xx;
-    hsize_t         dims[H5S_MAX_RANK];
+    pdcid_t         region_local, region_remote;
+    hsize_t         dims[H5S_MAX_RANK] = {0};
     perr_t          ret;
     pdcid_t         transfer_request;
+    H5T_class_t     h5_dclass;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1477,26 +1548,29 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         if (mem_space_id[u] == H5S_ALL)
             mem_space_id[u] = file_space_id[u];
 
+        h5_dclass = H5Tget_class(mem_type_id[u]);
+        if (_check_mem_type_id(h5_dclass, dset->pdc_type) == 0)
+            HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "vol-pdc does not support datatype conversion");
+
         /* Get memory dataspace object */
         if ((ndim = H5Sget_simple_extent_ndims(mem_space_id[u])) < 0)
             HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
         if (ndim != H5Sget_simple_extent_dims(mem_space_id[u], dims, NULL))
             HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
 
-        offset = (uint64_t *)calloc(sizeof(uint64_t), ndim);
         if (ndim > 4)
             HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data dimension not supported");
 
         // TODO: temporary workaround for writing compound data, as current PDC doesn't support
-        //       read doesn't work
+        //       compound datatype
         type_size = H5Tget_size(mem_type_id[u]);
         if (H5Tget_class(mem_type_id[u]) == H5T_COMPOUND)
             dims[ndim - 1] *= type_size;
 
         /* printf("Rank %d: mem offset %lu\n", dset->my_rank, offset[0]); */
         /* printf("Rank %d: mem count  %lu\n", dset->my_rank, dims[0]); */
-        region_x          = PDCregion_create(ndim, offset, dims);
-        dset->reg_id_from = region_x;
+        region_local      = PDCregion_create(ndim, offset, dims);
+        dset->reg_id_from = region_local;
 
         /* H5VL__pdc_sel_to_recx_iov(file_space_id[u], type_size, offset); */
         H5VL__pdc_sel_to_recx_iov(file_space_id[u], 1, offset);
@@ -1506,12 +1580,11 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         if (ndim > 1)
             printf("Rank %d: file offset1 %lu, count1 %lu\n", my_rank_g, offset[1], dims[1]);
 #endif
-        region_xx       = PDCregion_create(ndim, offset, dims);
-        dset->reg_id_to = region_xx;
+        region_remote   = PDCregion_create(ndim, offset, dims);
+        dset->reg_id_to = region_remote;
 
-#ifdef USE_REGION_TRANSFER
         transfer_request =
-            PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id, region_x, region_xx);
+            PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id, region_local, region_remote);
         ret = PDCregion_transfer_start(transfer_request);
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "Failed to region transfer start");
@@ -1524,31 +1597,6 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
         }
-#else
-        dset->mapped = 1;
-
-        if (PDC_INT == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_INT, region_x, dset->obj_id, region_xx);
-        else if (PDC_FLOAT == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_FLOAT, region_x, dset->obj_id, region_xx);
-        else if (PDC_DOUBLE == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_DOUBLE, region_x, dset->obj_id, region_xx);
-        else if (PDC_CHAR == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_CHAR, region_x, dset->obj_id, region_xx);
-        else
-            HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
-
-        if ((ret = PDCreg_obtain_lock(dset->obj_id, region_xx, PDC_WRITE, PDC_NOBLOCK)) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't obtain lock");
-
-        if ((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_WRITE)) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "can't release lock");
-        if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->reg_id_to)) < 0) {
-            HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
-        }
-#endif
-        if (offset)
-            free(offset);
     }
 
 done:
@@ -1566,40 +1614,54 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
 #endif
 
     H5VL_pdc_obj_t *dset;
-    size_t          type_size;
-    uint64_t *      offset;
+    uint64_t        offset[H5S_MAX_RANK] = {0};
     int             ndim;
-    pdcid_t         region_x, region_xx;
-    hsize_t         dims[H5S_MAX_RANK];
+    pdcid_t         region_local, region_remote;
+    hsize_t         dims[H5S_MAX_RANK] = {0};
     perr_t          ret;
     pdcid_t         transfer_request;
+    H5T_class_t     h5_dclass;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
     for (size_t u = 0; u < count; u++) {
         dset = (H5VL_pdc_obj_t *)_dset[u];
+
+        h5_dclass = H5Tget_class(mem_type_id[u]);
+        if (_check_mem_type_id(h5_dclass, dset->pdc_type) == 0)
+            HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "vol-pdc does not support datatype conversion");
+
         /* Get memory dataspace object */
-        if ((ndim = H5Sget_simple_extent_ndims(mem_space_id[u])) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
-        if (ndim != H5Sget_simple_extent_dims(mem_space_id[u], dims, NULL))
-            HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
+        if (mem_space_id[u] == H5S_ALL) {
+            if ((ndim = H5Sget_simple_extent_ndims(dset->space_id)) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
+            if (ndim != H5Sget_simple_extent_dims(dset->space_id, dims, NULL))
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
+        }
+        else {
+            if ((ndim = H5Sget_simple_extent_ndims(mem_space_id[u])) < 0)
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get number of dimensions");
+            if (ndim != H5Sget_simple_extent_dims(mem_space_id[u], dims, NULL))
+                HGOTO_ERROR(H5E_DATASET, H5E_CANTGET, FAIL, "can't get dimensions");
+        }
 
-        offset            = (uint64_t *)malloc(sizeof(uint64_t) * ndim);
-        offset[0]         = 0;
-        region_x          = PDCregion_create(ndim, offset, dims);
-        dset->reg_id_from = region_x;
+        // TODO: temporary workaround for reading compound data, as current PDC doesn't support
+        //       compound datatype
+        if (dset->compound_size > 0) {
+            dims[ndim - 1] *= dset->compound_size;
+        }
 
-        type_size = H5Tget_size(mem_type_id[u]);
-        /* H5VL__pdc_sel_to_recx_iov(file_space_id[u], type_size, offset); */
-        H5VL__pdc_sel_to_recx_iov(file_space_id[u], 1, offset);
+        region_local      = PDCregion_create(ndim, offset, dims);
+        dset->reg_id_from = region_local;
 
-        region_xx       = PDCregion_create(ndim, offset, dims);
-        dset->reg_id_to = region_xx;
-        free(offset);
+        if (file_space_id[u] != H5S_ALL)
+            H5VL__pdc_sel_to_recx_iov(file_space_id[u], 1, offset);
 
-#ifdef USE_REGION_TRANSFER
+        region_remote   = PDCregion_create(ndim, offset, dims);
+        dset->reg_id_to = region_remote;
+
         transfer_request =
-            PDCregion_transfer_create((void *)buf[u], PDC_READ, dset->obj_id, region_x, region_xx);
+            PDCregion_transfer_create((void *)buf[u], PDC_READ, dset->obj_id, region_local, region_remote);
         ret = PDCregion_transfer_start(transfer_request);
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_WRITEERROR, FAIL, "Failed to region transfer start");
@@ -1612,29 +1674,6 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
         if (ret != SUCCEED) {
             HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
         }
-#else
-        dset->mapped = 1;
-        if (PDC_INT == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_INT, region_x, dset->obj_id, region_xx);
-        else if (PDC_FLOAT == dset->type) {
-            PDCbuf_obj_map((void *)buf[u], PDC_FLOAT, region_x, dset->obj_id, region_xx);
-        }
-        else if (PDC_DOUBLE == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_DOUBLE, region_x, dset->obj_id, region_xx);
-        else if (PDC_CHAR == dset->type)
-            PDCbuf_obj_map((void *)buf[u], PDC_CHAR, region_x, dset->obj_id, region_xx);
-        else
-            HGOTO_ERROR(H5E_DATASET, H5E_UNSUPPORTED, FAIL, "data type not supported");
-
-        if ((ret = PDCreg_obtain_lock(dset->obj_id, region_xx, PDC_READ, PDC_NOBLOCK)) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't obtain lock");
-
-        if ((ret = PDCreg_release_lock(dset->obj_id, region_xx, PDC_READ)) < 0)
-            HGOTO_ERROR(H5E_DATASET, H5E_READERROR, FAIL, "can't release lock");
-        if ((ret = PDCbuf_obj_unmap(dset->obj_id, dset->reg_id_to)) < 0) {
-            HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "can't unmap object");
-        }
-#endif
     } // End for u < count
 
 done:
@@ -1870,6 +1909,7 @@ H5VL_pdc_group_create(void *obj, const H5VL_loc_params_t *loc_params __attribute
     group             = H5VL_pdc_new_obj(under, o->under_vol_id);
     group->group_name = group_name;
     group->h5i_type   = H5I_GROUP;
+    group->h5o_type   = H5O_TYPE_GROUP;
 
     char *file_name = (char *)calloc(1, strlen(o->file_name) + 1);
     strcpy(file_name, o->file_name);
@@ -1905,6 +1945,7 @@ H5VL_pdc_group_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__
     group             = H5VL_pdc_new_obj(under, o->under_vol_id);
     group->group_name = group_name;
     group->h5i_type   = H5I_GROUP;
+    group->h5o_type   = H5O_TYPE_GROUP;
 
     char *file_name = (char *)calloc(1, strlen(o->file_name) + 1);
     strcpy(file_name, o->file_name);
@@ -2051,6 +2092,7 @@ H5VL_pdc_attr_create(void *obj, const H5VL_loc_params_t *loc_params __attribute_
     attr->cont_id         = o->cont_id;
 
     attr->h5i_type = H5I_ATTR;
+    /* attr->h5o_type = H5O_TYPE_ATTR; */
 
     /* Check for async request */
     if (req && *req)
@@ -2077,6 +2119,7 @@ H5VL_pdc_attr_open(void *obj, const H5VL_loc_params_t *loc_params __attribute__(
     attr            = H5VL_pdc_new_obj(under, o->under_vol_id);
     attr->attr_name = attr_name;
     attr->obj_id    = o->obj_id;
+    attr->cont_id   = o->cont_id;
 
     return (void *)attr;
 } /* end H5VL_pdc_attr_open() */
@@ -2088,17 +2131,16 @@ H5VL_pdc_attr_read(void *attr, hid_t mem_type_id __attribute__((unused)), void *
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
-    void *          tag_value;
-    /* psize_t *       value_size; */
-    perr_t         ret_value;
-    pdc_var_type_t value_type;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)attr;
+    void *          tag_value = NULL;
+    perr_t          ret_value = FAIL;
+    pdc_var_type_t  value_type;
 
     if (o->obj_id > 0) {
         ret_value =
             PDCobj_get_tag(o->obj_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
     }
-    else if (o->obj_id > 0) {
+    else if (o->cont_id > 0) {
         ret_value =
             PDCcont_get_tag(o->cont_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
     }
@@ -2122,8 +2164,8 @@ H5VL_pdc_attr_write(void *attr, hid_t mem_type_id __attribute__((unused)), const
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
 
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr;
-    herr_t          ret_value;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)attr;
+    herr_t          ret_value = FAIL;
 
     if (o->obj_id > 0)
         ret_value =
@@ -2148,17 +2190,68 @@ H5VL_pdc_attr_get(void *obj, H5VL_attr_get_args_t *args, hid_t dxpl_id __attribu
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
 #endif
+    FUNC_ENTER_VOL(herr_t, SUCCEED)
 
-    H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    herr_t          ret_value;
+    H5VL_pdc_obj_t *o         = (H5VL_pdc_obj_t *)obj;
+    void *          tag_value = NULL;
+    pdc_var_type_t  value_type;
 
-    ret_value = H5VLattr_get(o->under_object, o->under_vol_id, args, dxpl_id, req);
+    if (o->obj_id > 0) {
+        PDCobj_get_tag(o->obj_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
+    }
+    else if (o->cont_id > 0) {
+        PDCcont_get_tag(o->cont_id, (char *)o->attr_name, &tag_value, &value_type, &(o->attr_value_size));
+    }
 
+    switch (args->op_type) {
+        case H5VL_ATTR_GET_SPACE:
+            hsize_t dims[1];
+            dims[0] = o->attr_value_size / PDC_get_var_type_size(value_type);
+            // TODO: handle compound
+            hid_t space_id                = H5Screate_simple(1, dims, NULL);
+            args->args.get_space.space_id = space_id;
+
+            break;
+        case H5VL_ATTR_GET_TYPE:
+            hid_t dtype;
+            switch (value_type) {
+                case PDC_INT:
+                    dtype = H5Tcopy(H5T_NATIVE_INT);
+                    break;
+                case PDC_FLOAT:
+                    dtype = H5Tcopy(H5T_NATIVE_FLOAT);
+                    break;
+                case PDC_DOUBLE:
+                    dtype = H5Tcopy(H5T_NATIVE_DOUBLE);
+                    break;
+                case PDC_CHAR:
+
+                case PDC_STRING:
+                    dtype = H5Tcopy(H5T_C_S1);
+                    H5Tset_size(dtype, o->attr_value_size);
+                    break;
+                default:
+                    fprintf(stderr, "Rank %d: %s unsupported PDC datatype type\n", my_rank_g, __func__);
+                    HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL,
+                                "invalid or unsupported attribute get operation");
+            }
+            args->args.get_type.type_id = dtype;
+
+            break;
+        default:
+            fprintf(stderr, "Rank %d: %s unsupported get type\n", my_rank_g, __func__);
+            HGOTO_ERROR(H5E_VOL, H5E_UNSUPPORTED, FAIL, "invalid or unsupported attribute get operation");
+    }
+
+    if (tag_value)
+        free(tag_value);
+
+done:
     /* Check for async request */
     if (req && *req)
         *req = H5VL_pdc_new_obj(*req, o->under_vol_id);
 
-    return ret_value;
+    FUNC_LEAVE_VOL
 } /* end H5VL_pdc_attr_get() */
 
 /*---------------------------------------------------------------------------*/
@@ -2189,8 +2282,7 @@ H5VL_pdc_attr_close(void *attr __attribute__((unused)), hid_t dxpl_id __attribut
 #endif
 
     /* H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)attr; */
-    herr_t ret_value;
-    ret_value = 0;
+    herr_t ret_value = SUCCEED;
 
     return ret_value;
 } /* end H5VL_pdc_attr_close() */
@@ -2260,8 +2352,8 @@ H5VL_pdc_object_copy(void *                   src_obj __attribute__((unused)),
 
 /*---------------------------------------------------------------------------*/
 static herr_t
-H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_get_args_t *args,
-                    hid_t dxpl_id, void **req)
+H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params __attribute__((unused)),
+                    H5VL_object_get_args_t *args, hid_t dxpl_id __attribute__((unused)), void **req)
 {
 #ifdef ENABLE_LOGGING
     fprintf(stderr, "Rank %d: entering %s\n", my_rank_g, __func__);
@@ -2270,7 +2362,6 @@ H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
     H5VL_pdc_obj_t *o = (H5VL_pdc_obj_t *)obj;
-    herr_t          ret_value;
 
     switch (args->op_type) {
         case H5VL_OBJECT_GET_FILE:
@@ -2282,7 +2373,7 @@ H5VL_pdc_object_get(void *obj, const H5VL_loc_params_t *loc_params, H5VL_object_
             break;
 
         case H5VL_OBJECT_GET_TYPE:
-            *(args->args.get_type.obj_type) = o->h5i_type;
+            *(args->args.get_type.obj_type) = o->h5o_type;
             break;
 
             /* case H5VL_OBJECT_GET_INFO: */
