@@ -78,12 +78,12 @@ typedef struct H5VL_pdc_obj_t {
     H5I_type_t     h5i_type;
     H5O_type_t     h5o_type;
     /* File object elements */
-    MPI_Comm       comm;
-    MPI_Info       info;
-    int            my_rank;
-    int            num_procs;
-    pdcid_t        cont_id;
-    int            nobj;
+    MPI_Comm               comm;
+    MPI_Info               info;
+    int                    my_rank;
+    int                    num_procs;
+    pdcid_t                cont_id;
+    int                    nobj;
     struct H5VL_pdc_obj_t *file_obj_ptr;
     H5_LIST_HEAD(H5VL_pdc_obj_t) ids;
     /* Dataset object elements */
@@ -801,7 +801,7 @@ H5VL__pdc_file_init(const char *name, unsigned flags __attribute__((unused)),
     file->h5i_type     = H5I_FILE;
     /* file->h5o_type     = H5O_TYPE_FILE; */
     file->file_obj_ptr = file;
-    file->req_cnt = 0;
+    file->req_cnt      = 0;
 
     if (NULL == (file->file_name = strdup(name)))
         HGOTO_ERROR(H5E_RESOURCE, H5E_CANTALLOC, NULL, "can't copy file name");
@@ -1609,16 +1609,17 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
             PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id, region_local, region_remote);
 
         if (file->req_cnt == 0) {
-            file->req_alloc = 100;
-            file->req_cnt = 0;
-            file->xfer_requests = (pdcid_t**)calloc(file->req_alloc, sizeof(pdcid_t*));
+            file->req_alloc     = 100;
+            file->req_cnt       = 0;
+            file->xfer_requests = (pdcid_t **)calloc(file->req_alloc, sizeof(pdcid_t *));
         }
 
         if (file->req_cnt > file->req_alloc - 2) {
             file->req_alloc *= 2;
-            file->xfer_requests = (pdcid_t**)realloc(file->xfer_requests, file->req_alloc*sizeof(pdcid_t*));
+            file->xfer_requests =
+                (pdcid_t **)realloc(file->xfer_requests, file->req_alloc * sizeof(pdcid_t *));
         }
-        file->xfer_requests[file->req_cnt+1] = transfer_request;
+        file->xfer_requests[file->req_cnt + 1] = transfer_request;
         file->req_cnt++;
 
         ret = PDCregion_transfer_start(transfer_request);
@@ -1627,7 +1628,6 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         }
 
         // Defer xfer wait to the next read operation and file close time
-
     }
 
 done:
