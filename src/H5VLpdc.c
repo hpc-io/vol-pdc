@@ -1570,17 +1570,17 @@ _add_xfer_request(H5VL_pdc_obj_t *file, pdcid_t transfer_request, void *buf)
         file->req_alloc     = 64;
         file->req_cnt       = 0;
         file->xfer_requests = (pdcid_t *)calloc(file->req_alloc, sizeof(pdcid_t));
-        file->bufs          = (void**)calloc(file->req_alloc, sizeof(void*));
+        file->bufs          = (void **)calloc(file->req_alloc, sizeof(void *));
     }
 
     if (file->req_cnt > file->req_alloc - 2) {
         file->req_alloc *= 2;
         file->xfer_requests = (pdcid_t *)realloc(file->xfer_requests, file->req_alloc * sizeof(pdcid_t));
-        file->bufs          = (void**)realloc(file->bufs, file->req_alloc * sizeof(void*));
+        file->bufs          = (void **)realloc(file->bufs, file->req_alloc * sizeof(void *));
     }
 
     file->xfer_requests[file->req_cnt + 1] = transfer_request;
-    file->bufs[file->req_cnt + 1] = buf;
+    file->bufs[file->req_cnt + 1]          = buf;
     file->req_cnt++;
 
     return SUCCEED;
@@ -1605,7 +1605,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
     perr_t          ret;
     pdcid_t         transfer_request;
     H5T_class_t     h5_dclass;
-    void           *cache_buf = NULL;
+    void *          cache_buf = NULL;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1667,7 +1667,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
             file->req_alloc     = 64;
             file->req_cnt       = 0;
             file->xfer_requests = (pdcid_t *)calloc(file->req_alloc, sizeof(pdcid_t));
-            file->bufs          = (void**)calloc(file->req_alloc, sizeof(void*));
+            file->bufs          = (void **)calloc(file->req_alloc, sizeof(void *));
         }
 
         if (write_cache_size_g + total_size > MAX_WRITE_CACHE_SIZE_GB * 1073741824llu) {
@@ -1696,11 +1696,11 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         }
         else {
             // Cache the user buffer
-            cache_buf =  malloc(total_size);
+            cache_buf = malloc(total_size);
             memcpy(cache_buf, buf[u], total_size);
 
-            transfer_request = PDCregion_transfer_create(cache_buf, PDC_WRITE, dset->obj_id,
-                                                         region_local, region_remote);
+            transfer_request =
+                PDCregion_transfer_create(cache_buf, PDC_WRITE, dset->obj_id, region_local, region_remote);
 
             _add_xfer_request(file, transfer_request, cache_buf);
         }
