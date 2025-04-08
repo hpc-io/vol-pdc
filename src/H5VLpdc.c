@@ -877,6 +877,10 @@ H5VL__pdc_file_close(H5VL_pdc_obj_t *file)
             ret = PDCregion_transfer_close(file->xfer_requests[i]);
             if (ret != SUCCEED)
                 HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
+            if (file->bufs[i] != NULL) {
+                free(file->bufs[i]);
+                file->bufs[i] = NULL;
+            }
         }
         file->req_cnt = 0;
         free(file->xfer_requests);
@@ -1555,7 +1559,7 @@ _check_mem_type_id(H5T_class_t h5_dclass, pdc_var_type_t pdc_dtype)
 
 /*---------------------------------------------------------------------------*/
 herr_t
-_add_xfer_request(H5VL_pdc_obj_t *file, pdcid_t transfer_request)
+_add_xfer_request(H5VL_pdc_obj_t *file, pdcid_t transfer_request, void *buf)
 {
     if (file == NULL) {
         fprintf(stderr, "Rank %d: error with %s, empty file ptr\n", my_rank_g, __func__);
@@ -1566,14 +1570,17 @@ _add_xfer_request(H5VL_pdc_obj_t *file, pdcid_t transfer_request)
         file->req_alloc     = 64;
         file->req_cnt       = 0;
         file->xfer_requests = (pdcid_t *)calloc(file->req_alloc, sizeof(pdcid_t));
+        file->bufs          = (void**)calloc(file->req_alloc, sizeof(void*));
     }
 
     if (file->req_cnt > file->req_alloc - 2) {
         file->req_alloc *= 2;
         file->xfer_requests = (pdcid_t *)realloc(file->xfer_requests, file->req_alloc * sizeof(pdcid_t));
+        file->bufs          = (void**)realloc(file->bufs, file->req_alloc * sizeof(void*));
     }
 
     file->xfer_requests[file->req_cnt + 1] = transfer_request;
+    file->bufs[file->req_cnt + 1] = buf;
     file->req_cnt++;
 
     return SUCCEED;
@@ -1598,6 +1605,7 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
     perr_t          ret;
     pdcid_t         transfer_request;
     H5T_class_t     h5_dclass;
+    void           *cache_buf = NULL;
 
     FUNC_ENTER_VOL(herr_t, SUCCEED)
 
@@ -1655,12 +1663,19 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         region_remote   = PDCregion_create(ndim, offset, dims);
         dset->reg_id_to = region_remote;
 
+        if (file->req_alloc == 0) {
+            file->req_alloc     = 64;
+            file->req_cnt       = 0;
+            file->xfer_requests = (pdcid_t *)calloc(file->req_alloc, sizeof(pdcid_t));
+            file->bufs          = (void**)calloc(file->req_alloc, sizeof(void*));
+        }
+
         if (write_cache_size_g + total_size > MAX_WRITE_CACHE_SIZE_GB * 1073741824llu) {
             // Reaching max cache size, finish existing transfer requests and the current one
             transfer_request = PDCregion_transfer_create((void *)buf[u], PDC_WRITE, dset->obj_id,
                                                          region_local, region_remote);
 
-            _add_xfer_request(file, transfer_request);
+            _add_xfer_request(file, transfer_request, NULL);
 
             ret = PDCregion_transfer_start_all(file->xfer_requests, file->req_cnt);
             if (ret != SUCCEED)
@@ -1681,13 +1696,13 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
         }
         else {
             // Cache the user buffer
-            file->bufs[file->req_cnt + 1] = malloc(total_size);
-            memcpy(file->bufs[file->req_cnt + 1], buf[u], total_size);
+            cache_buf =  malloc(total_size);
+            memcpy(cache_buf, buf[u], total_size);
 
-            transfer_request = PDCregion_transfer_create(file->bufs[file->req_cnt + 1], PDC_WRITE,
-                                                         dset->obj_id, region_local, region_remote);
+            transfer_request = PDCregion_transfer_create(cache_buf, PDC_WRITE, dset->obj_id,
+                                                         region_local, region_remote);
 
-            _add_xfer_request(file, transfer_request);
+            _add_xfer_request(file, transfer_request, cache_buf);
         }
 
         // Defer xfer wait to the next read operation and file close time
@@ -1732,8 +1747,11 @@ H5VL_pdc_dataset_read(size_t count, void *_dset[], hid_t mem_type_id[], hid_t me
         }
         for (i = 0; i < file->req_cnt; i++) {
             ret = PDCregion_transfer_close(file->xfer_requests[i]);
-            if (ret != SUCCEED) {
+            if (ret != SUCCEED)
                 HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
+            if (file->bufs[i] != NULL) {
+                free(file->bufs[i]);
+                file->bufs[i] = NULL;
             }
         }
         file->req_cnt = 0;
