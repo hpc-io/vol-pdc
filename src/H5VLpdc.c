@@ -1570,8 +1570,7 @@ _add_xfer_request(H5VL_pdc_obj_t *file, pdcid_t transfer_request)
 
     if (file->req_cnt > file->req_alloc - 2) {
         file->req_alloc *= 2;
-        file->xfer_requests =
-            (pdcid_t *)realloc(file->xfer_requests, file->req_alloc * sizeof(pdcid_t));
+        file->xfer_requests = (pdcid_t *)realloc(file->xfer_requests, file->req_alloc * sizeof(pdcid_t));
     }
 
     file->xfer_requests[file->req_cnt + 1] = transfer_request;
@@ -1677,19 +1676,18 @@ H5VL_pdc_dataset_write(size_t count, void *_dset[], hid_t mem_type_id[], hid_t m
                     HGOTO_ERROR(H5E_DATASET, H5E_CLOSEERROR, FAIL, "Failed to region transfer close");
                 file->xfer_requests[i] = 0;
             }
-            file->req_cnt = 0;
+            file->req_cnt      = 0;
             write_cache_size_g = 0;
         }
         else {
             // Cache the user buffer
-            file->bufs[file->req_cnt+1] = malloc(total_size);
-            memcpy(file->bufs[file->req_cnt+1], buf[u], total_size);
+            file->bufs[file->req_cnt + 1] = malloc(total_size);
+            memcpy(file->bufs[file->req_cnt + 1], buf[u], total_size);
 
-            transfer_request = PDCregion_transfer_create(file->bufs[file->req_cnt+1], PDC_WRITE,
+            transfer_request = PDCregion_transfer_create(file->bufs[file->req_cnt + 1], PDC_WRITE,
                                                          dset->obj_id, region_local, region_remote);
 
             _add_xfer_request(file, transfer_request);
-
         }
 
         // Defer xfer wait to the next read operation and file close time
